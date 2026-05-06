@@ -1,4 +1,4 @@
-async function searchWeb(query) {
+async function searchWeb({ query }) {
   try {
     const response = await fetch('https://api.tavily.com/search', {
       method: 'POST',

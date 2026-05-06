@@ -11,27 +11,15 @@ const bossLLM = new ChatGroq({
   temperature: 0
 });
 
-// Wrap the Control Plane function as a LangChain Tool so the Boss can invoke it
-const controlPlaneTool = tool(
-  async ({ query }) => {
-    return await ask_control_plane({ query });
-  },
-  {
-    name: "ask_control_plane",
-    description: "Fetches all necessary real-world data (flights, hotels, map coordinates, web search). You MUST use this tool to gather information before creating the final itinerary.",
-    schema: z.object({
-      query: z.string().describe("A detailed instruction to the control plane about what data to fetch (e.g., 'Find flights from NYC to TYO, hotels in TYO, and exact coordinates for Tokyo Tower').")
-    })
-  }
-);
-
-// Bind the single tool to the Boss LLM
-const bossWithTools = bossLLM.bindTools([controlPlaneTool]);
-
 /**
- * Main orchestrator workflow replacing the old single-pass logic.
+ * Main orchestrator workflow.
+ * @param {string} destination
+ * @param {string} origin
+ * @param {number} days
+ * @param {Object} options
+ * @param {Function} [onEvent] - Optional SSE callback for streaming progress
  */
-async function generateItinerary(destination, origin, days, options = {}) {
+async function generateItinerary(destination, origin, days, options = {}, onEvent) {
   const { interests, budgetLevel, pace, guests, startDate, endDate } = options;
   const prefsText = [
     guests ? `Travelers: ${guests}` : '',
@@ -42,10 +30,29 @@ async function generateItinerary(destination, origin, days, options = {}) {
   
   console.log(`\n[Main Agent - Boss] Starting CPaaT Workflow for ${destination} from ${origin || 'unspecified'} (${days} days)`);
   
+  // Wrap the Control Plane as a LangChain Tool, passing through the onEvent callback
+  const controlPlaneTool = tool(
+    async ({ query }) => {
+      return await ask_control_plane({ query }, onEvent);
+    },
+    {
+      name: "ask_control_plane",
+      description: "Fetches all necessary real-world data (flights, hotels, map coordinates, web search). You MUST use this tool to gather information before creating the final itinerary.",
+      schema: z.object({
+        query: z.string().describe("A detailed instruction to the control plane about what data to fetch (e.g., 'Find flights from NYC to TYO, hotels in TYO, and exact coordinates for Tokyo Tower').")
+      })
+    }
+  );
+
+  // Bind the single tool to the Boss LLM
+  const bossWithTools = bossLLM.bindTools([controlPlaneTool]);
+
   try {
     // ==========================================
     // PHASE 1: BOSS REASONING & DATA DELEGATION
     // ==========================================
+    onEvent?.("status", { phase: "reasoning", message: "AI is reasoning about your trip..." });
+
     const userPrompt = `I want to travel${origin ? ` from ${origin}` : ''} to ${destination} for ${days} days. ${prefsText ? `Preferences: ${prefsText}.` : ''} 
 You are the Boss Agent. You MUST use the ask_control_plane tool to fetch real-world data (flights, hotels, locations, coordinates) for this trip. 
 The user is traveling exactly from ${startDate} to ${endDate}. When you ask the Control Plane for flight data, you MUST provide these exact dates.
@@ -68,6 +75,8 @@ Pass a detailed query explaining exactly what you need compiled for this trip.`;
     // ==========================================
     // PHASE 2: FINAL SYNTHESIS
     // ==========================================
+    onEvent?.("status", { phase: "synthesizing", message: "Crafting your personalized itinerary..." });
+
     const synthesizerPrompt = `Here is the real-world data fetched by your Control Plane:
 ${rawToolData}
 

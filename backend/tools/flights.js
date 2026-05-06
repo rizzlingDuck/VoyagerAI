@@ -1,4 +1,4 @@
-async function findFlights(originCode, destCode, departureDate, returnDate) {
+async function findFlights({ originCode, destCode, departureDate, returnDate }) {
   try {
     let url = `https://google-flights2.p.rapidapi.com/api/v1/searchFlights?departure_id=${originCode}&arrival_id=${destCode}&outbound_date=${departureDate}&currency=USD&adults=1`;
     if (returnDate) url += `&return_date=${returnDate}`;

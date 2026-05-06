@@ -20,11 +20,22 @@ const toolRegistry = {
   searchHotels,
 };
 
+// Friendly display names for streaming events
+const TOOL_LABELS = {
+  findFlights: "Searching flights",
+  searchHotels: "Finding hotels",
+  getCoordinates: "Mapping locations",
+  searchWeb: "Researching destination",
+};
+
 /**
  * Control Plane core execution logic.
  * Parses the Boss's query into tool calls, executes them in parallel, and returns the raw JSON.
+ * @param {Object} params
+ * @param {string} params.query - The Boss Agent's data request
+ * @param {Function} [onEvent] - Optional SSE callback for streaming progress
  */
-async function ask_control_plane({ query }) {
+async function ask_control_plane({ query }, onEvent) {
   console.log(`\n[Control Plane - 8b] Received query from Boss: => "${query}"`);
   
   try {
@@ -35,13 +46,15 @@ Available tools:
 - findFlights (needs originCode, destCode, departureDate YYYY-MM-DD, returnDate YYYY-MM-DD)
 - getCoordinates (needs locationName)
 - searchWeb (needs query)
-- searchHotels (needs locationName, budgetLevel)
+- searchHotels (needs locationName, budgetLevel, checkinDate YYYY-MM-DD, checkoutDate YYYY-MM-DD)
 
 CRITICAL RULE: If the request implies specific activities, tourist attractions, or hotels, you MUST add a getCoordinates task for those specific place names to the tool list. We need exact map pins.
 
 Output ONLY valid JSON, no markdown blocks or conversational text. Example: [{"toolName": "searchWeb", "params": {"query": "weather"}}]`;
 
     console.log('[Control Plane - 8b] Sending Planner Prompt...');
+    onEvent?.("status", { phase: "planning", message: "AI is analyzing what data to fetch..." });
+    
     const plannerResult = await cpLLM.invoke([{ role: 'user', content: plannerPrompt }]);
     
     // Clean response of any markdown formatting
@@ -50,6 +63,8 @@ Output ONLY valid JSON, no markdown blocks or conversational text. Example: [{"t
     
     const toolRequests = JSON.parse(cleanJsonString);
     console.log(`[Control Plane - 8b] Planner proposed ${toolRequests.length} tool calls.`);
+
+    onEvent?.("status", { phase: "fetching", message: `Fetching data from ${toolRequests.length} sources...` });
 
     console.log('[Control Plane - 8b] Executing tools in parallel...');
     
@@ -60,13 +75,22 @@ Output ONLY valid JSON, no markdown blocks or conversational text. Example: [{"t
         
         if (!toolFn) return { tool: toolName, error: 'Unknown tool' };
 
+        // Emit tool_start event
+        const label = TOOL_LABELS[toolName] || toolName;
+        onEvent?.("tool_start", { tool: toolName, label, params });
+
         try {
-          const args = Object.values(params); 
-          const result = await toolFn(...args);
+          const result = await toolFn(params);
+          
+          // Emit tool_complete with a preview of the results
+          const preview = buildToolPreview(toolName, result);
+          onEvent?.("tool_complete", { tool: toolName, label, preview });
+          
           return { tool: toolName, params, result };
         } catch (err) {
           console.error(`[Control Plane - 8b] Tool ${toolName} failed:`, err.message);
-          return { tool: toolName, params, error: 'Timeout or Fetch Failed' };
+          onEvent?.("tool_error", { tool: toolName, label, error: err.message });
+          return { tool: toolName, params, error: `Failed to fetch data: ${err.message}` };
         }
       })
     );
@@ -76,6 +100,52 @@ Output ONLY valid JSON, no markdown blocks or conversational text. Example: [{"t
   } catch (error) {
     console.error('[Control Plane - 8b] Error:', error);
     return JSON.stringify({ error: "Control plane execution failed due to an internal error." });
+  }
+}
+
+/**
+ * Build a user-friendly preview of tool results for streaming display.
+ */
+function buildToolPreview(toolName, result) {
+  try {
+    switch (toolName) {
+      case "findFlights": {
+        if (!result || !result.flights) return { count: 0, summary: "No flights found" };
+        const flights = result.flights.slice(0, 3);
+        return {
+          count: result.flights.length,
+          items: flights.map(f => ({
+            airline: f.airline || "Unknown",
+            price: f.price || "N/A",
+            currency: f.currency || "USD",
+          })),
+        };
+      }
+      case "searchHotels": {
+        if (!result || !Array.isArray(result)) return { count: 0, summary: "No hotels found" };
+        const hotels = result.slice(0, 3);
+        return {
+          count: result.length,
+          items: hotels.map(h => ({
+            name: h.name || "Unknown",
+            rating: h.rating || "N/A",
+            price: h.price || "N/A",
+          })),
+        };
+      }
+      case "getCoordinates": {
+        if (!result) return { summary: "Location not found" };
+        return { lat: result.lat, lng: result.lng, name: result.display_name || "Found" };
+      }
+      case "searchWeb": {
+        if (!result || !result.results) return { count: 0, summary: "No results" };
+        return { count: result.results.length, summary: `Found ${result.results.length} sources` };
+      }
+      default:
+        return { summary: "Completed" };
+    }
+  } catch {
+    return { summary: "Completed" };
   }
 }
 

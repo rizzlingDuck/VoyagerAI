@@ -1,4 +1,4 @@
-async function searchHotels(locationName, budgetLevel) {
+async function searchHotels({ locationName, budgetLevel, checkinDate, checkoutDate }) {
   try {
     const rapidApiKey = process.env.RAPIDAPI_KEY;
     const rapidApiHost = 'booking-com.p.rapidapi.com';
@@ -30,21 +30,28 @@ async function searchHotels(locationName, budgetLevel) {
     // ==========================================
     // CALL 2: Search Hotels
     // ==========================================
-    // Generate dates: checkin = next month, checkout = checkin + 3 days
-    const today = new Date();
-    const checkin = new Date(today);
-    checkin.setMonth(checkin.getMonth() + 1);
+    // Use provided dates, or fallback to next month if missing
+    let checkinStr = checkinDate;
+    let checkoutStr = checkoutDate;
     
-    const checkout = new Date(checkin);
-    checkout.setDate(checkout.getDate() + 3);
-
-    const formatDt = (d) => d.toISOString().split('T')[0];
+    if (!checkinStr || !checkoutStr) {
+      const today = new Date();
+      const checkin = new Date(today);
+      checkin.setMonth(checkin.getMonth() + 1);
+      
+      const checkout = new Date(checkin);
+      checkout.setDate(checkout.getDate() + 3);
+      
+      const formatDt = (d) => d.toISOString().split('T')[0];
+      checkinStr = formatDt(checkin);
+      checkoutStr = formatDt(checkout);
+    }
 
     let orderBy = 'popularity';
     if (budgetLevel === '$') orderBy = 'price';
     else if (budgetLevel === '$$$') orderBy = 'class_descending';
 
-    const searchUrl = `https://${rapidApiHost}/v1/hotels/search?dest_id=${dest_id}&dest_type=${dest_type}&checkin_date=${formatDt(checkin)}&checkout_date=${formatDt(checkout)}&room_number=1&adults_number=1&units=metric&currency=USD&locale=en-gb&order_by=${orderBy}`;
+    const searchUrl = `https://${rapidApiHost}/v1/hotels/search?dest_id=${dest_id}&dest_type=${dest_type}&checkin_date=${checkinStr}&checkout_date=${checkoutStr}&room_number=1&adults_number=1&units=metric&currency=USD&locale=en-gb&order_by=${orderBy}`;
     
     const searchRes = await fetch(searchUrl, {
       method: 'GET',
