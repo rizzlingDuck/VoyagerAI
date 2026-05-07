@@ -1,7 +1,9 @@
-import { X, Plus, MapPin, Calendar } from "lucide-react";
+import { X, Plus, MapPin, Calendar, LogIn, LogOut } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useAuth } from "../context/AuthContext";
 
-function Sidebar({ isOpen, toggleSidebar, savedTrips, loadTrip, startNewTrip }) {
+function Sidebar({ isOpen, toggleSidebar, savedTrips, loadTrip, startNewTrip, onOpenAuth }) {
+  const { user, signOut } = useAuth();
   return (
     <>
       {/* Backdrop */}
@@ -31,15 +33,31 @@ function Sidebar({ isOpen, toggleSidebar, savedTrips, loadTrip, startNewTrip }) 
         <div className="flex items-center justify-between p-6" style={{ borderBottom: "1px solid var(--border)" }}>
           <div>
             <h2 className="text-xl font-bold gradient-text" style={{ fontFamily: "var(--font-heading)" }}>My Trips</h2>
-            <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>{savedTrips.length} saved itineraries</p>
+            {user ? (
+              <p className="text-xs mt-0.5 truncate max-w-[160px]" style={{ color: "var(--text-muted)" }}>{user.email}</p>
+            ) : (
+              <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>Sign in to save trips</p>
+            )}
           </div>
-          <button
-            onClick={toggleSidebar}
-            className="p-2 rounded-xl hover:bg-sky-100/50 transition-colors cursor-pointer"
-            aria-label="Close sidebar"
-          >
-            <X size={20} style={{ color: "var(--text)" }} />
-          </button>
+          <div className="flex items-center gap-1">
+            {user && (
+              <button
+                onClick={signOut}
+                className="p-2 rounded-xl hover:bg-red-50 transition-colors cursor-pointer"
+                aria-label="Sign out"
+                title="Sign out"
+              >
+                <LogOut size={17} style={{ color: "var(--text-muted)" }} />
+              </button>
+            )}
+            <button
+              onClick={toggleSidebar}
+              className="p-2 rounded-xl hover:bg-sky-100/50 transition-colors cursor-pointer"
+              aria-label="Close sidebar"
+            >
+              <X size={20} style={{ color: "var(--text)" }} />
+            </button>
+          </div>
         </div>
 
         {/* New Itinerary Button */}
@@ -56,9 +74,26 @@ function Sidebar({ isOpen, toggleSidebar, savedTrips, loadTrip, startNewTrip }) 
           </motion.button>
         </div>
 
-        {/* Saved Trips List */}
+        {/* Trip list or auth CTA */}
         <div className="flex-1 overflow-y-auto px-4 pb-4 space-y-2">
-          {savedTrips.length === 0 ? (
+          {!user ? (
+            <div className="text-center py-12 px-2">
+              <div className="w-14 h-14 rounded-2xl mx-auto mb-3 flex items-center justify-center" style={{ background: "rgba(0, 119, 182, 0.08)" }}>
+                <LogIn size={24} className="text-sky-400" />
+              </div>
+              <p className="text-sm font-semibold mb-1" style={{ color: "var(--text)" }}>Sign in to save trips</p>
+              <p className="text-xs mb-4" style={{ color: "var(--text-light)" }}>Your itineraries sync across all devices.</p>
+              <motion.button
+                onClick={() => { toggleSidebar(); onOpenAuth?.(); }}
+                className="px-5 py-2.5 rounded-xl text-white text-sm font-semibold cursor-pointer"
+                style={{ background: "linear-gradient(135deg, var(--primary), var(--primary-dark))" }}
+                whileHover={{ scale: 1.03 }}
+                whileTap={{ scale: 0.97 }}
+              >
+                Sign In
+              </motion.button>
+            </div>
+          ) : savedTrips.length === 0 ? (
             <div className="text-center py-12">
               <div className="w-14 h-14 rounded-2xl mx-auto mb-3 flex items-center justify-center" style={{ background: "rgba(0, 119, 182, 0.08)" }}>
                 <MapPin size={24} className="text-sky-300" />

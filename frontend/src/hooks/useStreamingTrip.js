@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef } from "react";
+import { supabase } from "../lib/supabaseClient";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
@@ -38,14 +39,24 @@ export default function useStreamingTrip() {
     abortRef.current = abortController;
 
     try {
+      // Attach Supabase JWT so the backend can verify the user
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
       const response = await fetch(`${API_URL}/api/plan-trip-stream`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { "Authorization": `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify(formData),
         signal: abortController.signal,
       });
 
       if (!response.ok) {
+        if (response.status === 401) {
+          throw new Error("Please sign in to plan a trip.");
+        }
         throw new Error(`Server error: ${response.status}`);
       }
 

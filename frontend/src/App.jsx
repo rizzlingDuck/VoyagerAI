@@ -2,20 +2,24 @@ import { useState } from "react";
 import mapboxgl from "mapbox-gl";
 import { differenceInDays, format } from "date-fns";
 
+import { AuthProvider, useAuth } from "./context/AuthContext";
 import LandingPage from "./components/landing/LandingPage";
 import StreamingLoader from "./components/common/StreamingLoader";
 import ItineraryView from "./components/itinerary/ItineraryView";
 import ErrorBoundary from "./components/common/ErrorBoundary";
+import AuthModal from "./components/auth/AuthModal";
 import useSavedTrips from "./hooks/useSavedTrips";
 import useStreamingTrip from "./hooks/useStreamingTrip";
 
 mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN;
 
-// ─────────────── Main App ───────────────
-function App() {
+// ─────────────── Inner App (needs AuthContext) ───────────────
+function AppInner() {
+  const { user } = useAuth();
   const [formData, setFormData] = useState({ destination: "", origin: "", interests: "", budget: "", pace: "", guests: "" });
   const [dateRange, setDateRange] = useState([null, null]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [authModalOpen, setAuthModalOpen] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
   const [activeDay, setActiveDay] = useState(null);
   const [error, setError] = useState(null);
@@ -31,7 +35,13 @@ function App() {
       setError("Please select travel dates.");
       return;
     }
-    
+
+    // Require auth before submitting
+    if (!user) {
+      setAuthModalOpen(true);
+      return;
+    }
+
     setIsSaved(false);
     setActiveDay(null);
     setError(null);
@@ -53,13 +63,9 @@ function App() {
 
   const handleLoadTrip = (id) => {
     const trip = findTrip(id);
-    // Loading a saved trip goes directly into the itinerary view
-    // We need to handle this differently since streaming hook owns itinerary state
-    // For now, loaded trips bypass streaming
     if (trip) {
       setIsSaved(true);
       setActiveDay(null);
-      // Use a separate state for loaded trips
       setLoadedTrip(trip);
     }
   };
@@ -79,20 +85,24 @@ function App() {
   // ─── Landing Page ───
   if (!displayedItinerary && status !== "streaming") {
     return (
-      <LandingPage
-        formData={formData}
-        dateRange={dateRange}
-        error={error || streamError}
-        sidebarOpen={sidebarOpen}
-        savedTrips={savedTrips}
-        onFormChange={handleChange}
-        onDateChange={(update) => setDateRange(update)}
-        onSubmit={handleSubmit}
-        onOpenSidebar={() => setSidebarOpen(true)}
-        onCloseSidebar={() => setSidebarOpen(false)}
-        onLoadTrip={handleLoadTrip}
-        onStartNewTrip={handleNewTrip}
-      />
+      <>
+        <LandingPage
+          formData={formData}
+          dateRange={dateRange}
+          error={error || streamError}
+          sidebarOpen={sidebarOpen}
+          savedTrips={savedTrips}
+          onFormChange={handleChange}
+          onDateChange={(update) => setDateRange(update)}
+          onSubmit={handleSubmit}
+          onOpenSidebar={() => setSidebarOpen(true)}
+          onCloseSidebar={() => setSidebarOpen(false)}
+          onLoadTrip={handleLoadTrip}
+          onStartNewTrip={handleNewTrip}
+          onOpenAuth={() => setAuthModalOpen(true)}
+        />
+        <AuthModal isOpen={authModalOpen} onClose={() => setAuthModalOpen(false)} />
+      </>
     );
   }
 
@@ -109,22 +119,35 @@ function App() {
 
   // ─── Itinerary View ───
   return (
-    <ErrorBoundary onReset={handleNewTrip}>
-      <ItineraryView
-        itinerary={displayedItinerary}
-        isSaved={isSaved}
-        activeDay={activeDay}
-        setActiveDay={setActiveDay}
-        sidebarOpen={sidebarOpen}
-        savedTrips={savedTrips}
-        onSave={handleSave}
-        onNewTrip={handleNewTrip}
-        onOpenSidebar={() => setSidebarOpen(true)}
-        onCloseSidebar={() => setSidebarOpen(false)}
-        onLoadTrip={handleLoadTrip}
-        onStartNewTrip={handleNewTrip}
-      />
-    </ErrorBoundary>
+    <>
+      <ErrorBoundary onReset={handleNewTrip}>
+        <ItineraryView
+          itinerary={displayedItinerary}
+          isSaved={isSaved}
+          activeDay={activeDay}
+          setActiveDay={setActiveDay}
+          sidebarOpen={sidebarOpen}
+          savedTrips={savedTrips}
+          onSave={handleSave}
+          onNewTrip={handleNewTrip}
+          onOpenSidebar={() => setSidebarOpen(true)}
+          onCloseSidebar={() => setSidebarOpen(false)}
+          onLoadTrip={handleLoadTrip}
+          onStartNewTrip={handleNewTrip}
+          onOpenAuth={() => setAuthModalOpen(true)}
+        />
+      </ErrorBoundary>
+      <AuthModal isOpen={authModalOpen} onClose={() => setAuthModalOpen(false)} />
+    </>
+  );
+}
+
+// ─────────────── Root App (wraps with AuthProvider) ───────────────
+function App() {
+  return (
+    <AuthProvider>
+      <AppInner />
+    </AuthProvider>
   );
 }
 

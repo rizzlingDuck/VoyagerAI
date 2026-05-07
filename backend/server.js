@@ -4,6 +4,7 @@ const rateLimit = require("express-rate-limit");
 require("dotenv").config();
 
 const { generateItinerary } = require("./ai/mainAgent");
+const { authMiddleware } = require("./middleware/auth");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -52,7 +53,7 @@ function validateTripInput(body) {
 }
 
 // ─── Original endpoint (kept for backward compatibility) ──────────────────────
-app.post("/api/plan-trip", tripLimiter, async (req, res) => {
+app.post("/api/plan-trip", tripLimiter, authMiddleware, async (req, res) => {
   const validationError = validateTripInput(req.body);
   if (validationError) return res.status(400).json({ error: validationError });
 
@@ -67,7 +68,7 @@ app.post("/api/plan-trip", tripLimiter, async (req, res) => {
 });
 
 // ─── SSE Streaming endpoint ───────────────────────────────────────────────────
-app.post("/api/plan-trip-stream", tripLimiter, async (req, res) => {
+app.post("/api/plan-trip-stream", tripLimiter, authMiddleware, async (req, res) => {
   const validationError = validateTripInput(req.body);
   if (validationError) return res.status(400).json({ error: validationError });
 

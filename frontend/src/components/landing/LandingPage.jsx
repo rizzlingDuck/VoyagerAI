@@ -1,11 +1,13 @@
 import { motion } from "framer-motion";
-import { Menu, Sparkles } from "lucide-react";
+import { Menu, Sparkles, LogIn, User, LogOut } from "lucide-react";
 import Sidebar from "../Sidebar";
 import TripForm from "./TripForm";
 import TypewriterHeading from "../common/TypewriterText";
 import { staggerContainer, fadeInUp } from "../../utils/constants";
+import { useAuth } from "../../context/AuthContext";
 
-export default function LandingPage({ formData, dateRange, error, sidebarOpen, savedTrips, onFormChange, onDateChange, onSubmit, onOpenSidebar, onCloseSidebar, onLoadTrip, onStartNewTrip }) {
+export default function LandingPage({ formData, dateRange, error, sidebarOpen, savedTrips, onFormChange, onDateChange, onSubmit, onOpenSidebar, onCloseSidebar, onLoadTrip, onStartNewTrip, onOpenAuth }) {
+  const { user, signOut } = useAuth();
   return (
     <div className="min-h-screen relative overflow-hidden" style={{ background: "var(--bg)", color: "var(--text)" }}>
       <Sidebar isOpen={sidebarOpen} toggleSidebar={onCloseSidebar} savedTrips={savedTrips} loadTrip={onLoadTrip} startNewTrip={onStartNewTrip} />
@@ -34,6 +36,36 @@ export default function LandingPage({ formData, dateRange, error, sidebarOpen, s
           >
             <Menu size={24} style={{ color: "var(--text)" }} />
           </motion.button>
+
+          {/* Auth Button (top-right) */}
+          <motion.div variants={fadeInUp} className="absolute right-0 top-0">
+            {user ? (
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-medium hidden md:block" style={{ color: "var(--text-muted)" }}>
+                  {user.email}
+                </span>
+                <button
+                  onClick={signOut}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold transition-colors cursor-pointer hover:bg-red-50"
+                  style={{ color: "var(--text-muted)" }}
+                >
+                  <LogOut size={15} />
+                  <span className="hidden md:block">Sign out</span>
+                </button>
+              </div>
+            ) : (
+              <motion.button
+                onClick={onOpenAuth}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white cursor-pointer"
+                style={{ background: "linear-gradient(135deg, var(--primary), var(--primary-dark))", boxShadow: "0 2px 10px rgba(14, 165, 233, 0.25)" }}
+                whileHover={{ scale: 1.03 }}
+                whileTap={{ scale: 0.97 }}
+              >
+                <LogIn size={15} />
+                Sign In
+              </motion.button>
+            )}
+          </motion.div>
 
           {/* Badge */}
           <motion.div variants={fadeInUp} custom={0} className="inline-flex items-center gap-2 mb-5 px-4 py-2 rounded-full text-xs font-semibold tracking-widest uppercase" style={{ background: "rgba(0, 119, 182, 0.1)", color: "var(--primary)" }}>
