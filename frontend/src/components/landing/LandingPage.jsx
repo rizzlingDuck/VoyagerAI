@@ -12,7 +12,7 @@ export default function LandingPage({ formData, dateRange, error, sidebarOpen, s
 
       {/* ─── Decorative Background ─── */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden="true">
-        <div className="absolute -top-40 -right-40 w-[500px] h-[500px] rounded-full animate-float-slow" style={{ background: "radial-gradient(circle, rgba(14, 165, 233, 0.08) 0%, transparent 70%)" }} />
+        <div className="absolute -top-40 -right-40 w-[500px] h-[500px] rounded-full animate-float-slow" style={{ background: "radial-gradient(circle, rgba(0, 119, 182, 0.08) 0%, transparent 70%)" }} />
         <div className="absolute -bottom-20 -left-20 w-[400px] h-[400px] rounded-full animate-float" style={{ background: "radial-gradient(circle, rgba(249, 115, 22, 0.06) 0%, transparent 70%)", animationDelay: "2s" }} />
         <div className="absolute top-1/3 left-1/2 w-[600px] h-[600px] rounded-full" style={{ background: "radial-gradient(circle, rgba(56, 189, 248, 0.04) 0%, transparent 60%)" }} />
       </div>
@@ -36,7 +36,7 @@ export default function LandingPage({ formData, dateRange, error, sidebarOpen, s
           </motion.button>
 
           {/* Badge */}
-          <motion.div variants={fadeInUp} custom={0} className="inline-flex items-center gap-2 mb-5 px-4 py-2 rounded-full text-xs font-semibold tracking-widest uppercase" style={{ background: "rgba(14, 165, 233, 0.1)", color: "var(--primary)" }}>
+          <motion.div variants={fadeInUp} custom={0} className="inline-flex items-center gap-2 mb-5 px-4 py-2 rounded-full text-xs font-semibold tracking-widest uppercase" style={{ background: "rgba(0, 119, 182, 0.1)", color: "var(--primary)" }}>
             <Sparkles size={14} />
             AI-Powered Trip Planner
           </motion.div>

@@ -2,6 +2,7 @@ const { ChatGroq } = require('@langchain/groq');
 const { tool } = require("@langchain/core/tools");
 const { z } = require("zod");
 const { ask_control_plane } = require("./controlPlane");
+const { ItinerarySchema } = require("./schemas");
 
 // The Main Agent ('The Boss') uses the powerful versatile model for reasoning and synthesis
 const bossLLM = new ChatGroq({
@@ -39,7 +40,7 @@ async function generateItinerary(destination, origin, days, options = {}, onEven
       name: "ask_control_plane",
       description: "Fetches all necessary real-world data (flights, hotels, map coordinates, web search). You MUST use this tool to gather information before creating the final itinerary.",
       schema: z.object({
-        query: z.string().describe("A detailed instruction to the control plane about what data to fetch (e.g., 'Find flights from NYC to TYO, hotels in TYO, and exact coordinates for Tokyo Tower').")
+        query: z.string().describe("A detailed instruction to the control plane about what data to fetch (e.g., 'Find flights from NYC to TYO, hotels in TYO, and exact coordinates for Tokyo Tower')."),
       })
     }
   );
@@ -77,8 +78,146 @@ Pass a detailed query explaining exactly what you need compiled for this trip.`;
     // ==========================================
     onEvent?.("status", { phase: "synthesizing", message: "Crafting your personalized itinerary..." });
 
-    const synthesizerPrompt = `Here is the real-world data fetched by your Control Plane:
+    const synthesizerPrompt = buildSynthesizerPrompt(rawToolData, destination, days, startDate, endDate, pace, guests, interests);
+
+    console.log('[Main Agent - Boss] Performing final synthesis based on gathered data...');
+    const synthesizerResult = await bossLLM.invoke([{ role: 'user', content: synthesizerPrompt }]);
+
+    const rawSynthResult = typeof synthesizerResult.content === 'string'
+      ? synthesizerResult.content
+      : synthesizerResult.content[0].text;
+    const cleanFinalJson = rawSynthResult.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+
+    // ── Structured validation (replaces raw JSON.parse) ──────────────────────
+    console.log('[Main Agent - Boss] Parsing and validating final itinerary...');
+    let finalItinerary = await parseAndValidateItinerary(cleanFinalJson, destination, days, startDate, endDate, pace, guests, interests);
+
+    return finalItinerary;
+
+  } catch (error) {
+    console.error('[Main Agent - Boss] Workflow Failed:', error);
+    
+    return {
+      destination: destination,
+      centerCoordinates: [0, 0],
+      budget_used: "Error retrieving data",
+      mapMarkers: [],
+      flights: [],
+      hotels: [],
+      days: [
+        {
+          day: 1,
+          theme: "API Overload Notice",
+          activities: [
+            {
+              time: "N/A",
+              location: "Error Generated Itinerary",
+              description: "Our AI systems experienced unexpected downtime running the CPaaT flow. Please try again later.",
+              cost: "$0",
+              coordinates: [0, 0],
+              category: "attraction",
+            }
+          ]
+        }
+      ]
+    };
+  }
+}
+
+/**
+ * Attempt to parse + Zod-validate the itinerary JSON.
+ * If validation fails, fire a repair prompt to the LLM once and try again.
+ */
+async function parseAndValidateItinerary(rawJson, destination, days, startDate, endDate, pace, guests, interests) {
+  // ── First attempt ─────────────────────────────────────────────────────────
+  try {
+    const parsed = JSON.parse(rawJson);
+    const validated = ItinerarySchema.safeParse(parsed);
+
+    if (validated.success) {
+      console.log('[Main Agent - Boss] Itinerary passed Zod validation.');
+      return validated.data;
+    }
+
+    // Log schema errors, attempt repair
+    const errorSummary = validated.error.flatten();
+    console.warn('[Main Agent - Boss] Itinerary failed schema validation:', JSON.stringify(errorSummary, null, 2));
+    console.log('[Main Agent - Boss] Firing repair prompt...');
+
+    return await repairItinerary(rawJson, errorSummary, destination, days, startDate, endDate, pace, guests, interests);
+
+  } catch (parseErr) {
+    console.error('[Main Agent - Boss] Failed to parse itinerary JSON:', parseErr.message);
+    console.log('[Main Agent - Boss] Firing repair prompt...');
+    return await repairItinerary(rawJson, { _parseError: parseErr.message }, destination, days, startDate, endDate, pace, guests, interests);
+  }
+}
+
+/**
+ * Send the broken JSON + error context back to the LLM for structural repair.
+ * Falls back to a hardcoded error object if repair also fails.
+ */
+async function repairItinerary(brokenJson, errors, destination, days, startDate, endDate, pace, guests, interests) {
+  try {
+    const repairPrompt = `The following JSON itinerary has structural issues that must be fixed:
+
+ERRORS:
+${JSON.stringify(errors, null, 2)}
+
+BROKEN JSON (first 3000 chars):
+${brokenJson.slice(0, 3000)}
+
+Fix ONLY the structural/schema issues listed above. Do not change the trip content.
+Output ONLY valid JSON that satisfies the schema. No markdown, no commentary.`;
+
+    const repairResult = await bossLLM.invoke([{ role: 'user', content: repairPrompt }]);
+    const rawRepair = typeof repairResult.content === 'string'
+      ? repairResult.content
+      : repairResult.content[0].text;
+    const cleanRepair = rawRepair.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+
+    const parsedRepair = JSON.parse(cleanRepair);
+    const revalidated = ItinerarySchema.safeParse(parsedRepair);
+
+    if (revalidated.success) {
+      console.log('[Main Agent - Boss] Repair successful — itinerary passed schema validation.');
+      return revalidated.data;
+    }
+
+    // Repair also failed — use lenient fallback: return raw parsed object
+    console.warn('[Main Agent - Boss] Repair attempt still failed schema. Returning parsed object as-is.');
+    return parsedRepair;
+
+  } catch (err) {
+    console.error('[Main Agent - Boss] Repair prompt failed:', err.message);
+    // Last resort — return a minimal valid error object
+    return {
+      destination,
+      centerCoordinates: [0, 0],
+      budget_used: "Could not estimate",
+      mapMarkers: [],
+      flights: [{ airline: "Data unavailable", price: "N/A", currency: "USD", departureDate: startDate || "", returnDate: endDate || "" }],
+      hotels: [{ name: "Data unavailable", rating: "N/A", price: "N/A", currency: "USD", lat: 0, lng: 0 }],
+      days: Array.from({ length: days }, (_, i) => ({
+        day: i + 1,
+        theme: "Itinerary data could not be generated",
+        activities: [{
+          time: "N/A",
+          location: "Please try again",
+          category: "attraction",
+          description: "The AI had trouble structuring the itinerary. Please try your request again.",
+          coordinates: [0, 0],
+        }]
+      })),
+    };
+  }
+}
+
+function buildSynthesizerPrompt(rawToolData, destination, days, startDate, endDate, pace, guests, interests) {
+  return `Here is the real-world data fetched by your Control Plane:
 ${rawToolData}
+
+Note: Any tool result with "_dataUnavailable: true" means that data source failed after multiple retries. For those sections, clearly mark the data as estimated (e.g., "~$500 est." for prices) rather than presenting it as real.
 
 Using this data, create a detailed, day-by-day JSON itinerary for a trip to ${destination}. If any tool data is empty, errored, or missing, you MUST fabricate realistic placeholder data (e.g., invent 2-3 plausible airlines with estimated prices for flights, and 2-3 plausible hotels with estimated nightly rates). The flights and hotels arrays must NEVER be empty.
 
@@ -135,44 +274,6 @@ Ensure the output STRICTLY matches this exact JSON schema:
 - The hotels array MUST contain at least 2 hotel options. Use gathered data if available, otherwise fabricate realistic estimates.
 - The budget_used MUST be a realistic sum of the flights, estimated hotels, and all listed daily activity costs combined. Keep the estimate affordable and mathematically logical. Do not use generic high defaults.
 - Output ONLY valid JSON, no markdown blocks or conversational text.`;
-
-    console.log('[Main Agent - Boss] Performing final synthesis based on gathered data...');
-    const synthesizerResult = await bossLLM.invoke([{ role: 'user', content: synthesizerPrompt }]);
-
-    const rawSynthResult = typeof synthesizerResult.content === 'string' ? synthesizerResult.content : synthesizerResult.content[0].text;
-    const cleanFinalJson = rawSynthResult.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
-
-    console.log('[Main Agent - Boss] Parsing final itinerary...');
-    const finalItinerary = JSON.parse(cleanFinalJson);
-    return finalItinerary;
-
-  } catch (error) {
-    console.error('[Main Agent - Boss] Workflow Failed:', error);
-    
-    return {
-      destination: destination,
-      centerCoordinates: [0, 0],
-      budget_used: "Error retrieving data",
-      mapMarkers: [],
-      flights: [],
-      hotels: [],
-      days: [
-        {
-          day: 1,
-          theme: "API Overload Notice",
-          activities: [
-            {
-              time: "N/A",
-              location: "Error Generated Itinerary",
-              description: "Our AI systems experienced unexpected downtime running the CPaaT flow. Please try again later.",
-              cost: "$0",
-              coordinates: [0, 0]
-            }
-          ]
-        }
-      ]
-    };
-  }
 }
 
 module.exports = { generateItinerary };

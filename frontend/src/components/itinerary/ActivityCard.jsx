@@ -24,11 +24,11 @@ const ActivityCard = forwardRef(function ActivityCard({ activity, index, onCardC
         className="relative rounded-xl p-4 mb-3 cursor-pointer group"
         style={{ background: "var(--bg-card)", border: "1px solid var(--border)", boxShadow: "var(--shadow-sm)" }}
         onClick={() => onCardClick(activity)}
-        whileHover={{ y: -2, boxShadow: "0 8px 24px rgba(14, 165, 233, 0.1), 0 2px 8px rgba(0,0,0,0.04)", borderColor: "rgba(14, 165, 233, 0.3)" }}
+        whileHover={{ y: -2, boxShadow: "0 8px 24px rgba(0, 119, 182, 0.1), 0 2px 8px rgba(0,0,0,0.04)", borderColor: "rgba(0, 119, 182, 0.3)" }}
         transition={{ duration: 0.2 }}
       >
         {/* Timeline dot */}
-        <div className="absolute -left-[33px] top-5 w-3 h-3 rounded-full border-2 border-white" style={{ background: "var(--primary)", boxShadow: "0 0 0 2px rgba(14, 165, 233, 0.2)" }} />
+        <div className="absolute -left-[33px] top-5 w-3 h-3 rounded-full border-2 border-white" style={{ background: "var(--primary)", boxShadow: "0 0 0 2px rgba(0, 119, 182, 0.2)" }} />
 
         {/* Category Badge */}
         <div className="flex items-center gap-2 mb-2">

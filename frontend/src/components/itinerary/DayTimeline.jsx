@@ -13,7 +13,7 @@ const DayTimeline = forwardRef(function DayTimeline({ day, dayIndex, activityRef
     >
       {/* Day Header */}
       <div className="flex items-center gap-3 mb-4">
-        <div className="w-9 h-9 rounded-full text-white flex items-center justify-center text-sm font-bold shadow-md" style={{ background: "linear-gradient(135deg, var(--primary), var(--primary-dark))", boxShadow: "0 2px 8px rgba(14, 165, 233, 0.3)" }}>
+        <div className="w-9 h-9 rounded-full text-white flex items-center justify-center text-sm font-bold shadow-md" style={{ background: "linear-gradient(135deg, var(--primary), var(--primary-dark))", boxShadow: "0 2px 8px rgba(0, 119, 182, 0.3)" }}>
           {day.day}
         </div>
         <div>

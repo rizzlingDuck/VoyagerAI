@@ -131,7 +131,7 @@ function ToolCard({ tool, index }) {
       layout
     >
       {/* Status Icon */}
-      <div className="shrink-0 w-8 h-8 rounded-lg flex items-center justify-center mt-0.5" style={{ background: isDone ? "rgba(16, 185, 129, 0.1)" : isError ? "rgba(239, 68, 68, 0.1)" : "rgba(14, 165, 233, 0.1)" }}>
+      <div className="shrink-0 w-8 h-8 rounded-lg flex items-center justify-center mt-0.5" style={{ background: isDone ? "rgba(16, 185, 129, 0.1)" : isError ? "rgba(239, 68, 68, 0.1)" : "rgba(0, 119, 182, 0.1)" }}>
         {isRunning && <Loader2 size={16} className="text-sky-500 animate-spin" />}
         {isDone && <Check size={16} className="text-emerald-500" />}
         {isError && <AlertCircle size={16} className="text-red-500" />}
@@ -180,7 +180,7 @@ function ToolPreview({ tool }) {
     return (
       <div className="flex flex-wrap gap-1.5">
         {preview.items.map((f, i) => (
-          <span key={i} className="text-[11px] font-medium px-2 py-0.5 rounded-full" style={{ background: "rgba(14, 165, 233, 0.08)", color: "#075985" }}>
+          <span key={i} className="text-[11px] font-medium px-2 py-0.5 rounded-full" style={{ background: "rgba(0, 119, 182, 0.08)", color: "#075985" }}>
             {f.airline} · {f.price} {f.currency}
           </span>
         ))}

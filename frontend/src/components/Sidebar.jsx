@@ -47,8 +47,8 @@ function Sidebar({ isOpen, toggleSidebar, savedTrips, loadTrip, startNewTrip }) 
           <motion.button
             onClick={() => { startNewTrip(); toggleSidebar(); }}
             className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-white font-semibold cursor-pointer"
-            style={{ background: "linear-gradient(135deg, var(--primary), var(--primary-dark))", boxShadow: "0 2px 10px rgba(14, 165, 233, 0.3)" }}
-            whileHover={{ scale: 1.02, boxShadow: "0 4px 16px rgba(14, 165, 233, 0.4)" }}
+            style={{ background: "linear-gradient(135deg, var(--primary), var(--primary-dark))", boxShadow: "0 2px 10px rgba(0, 119, 182, 0.3)" }}
+            whileHover={{ scale: 1.02, boxShadow: "0 4px 16px rgba(0, 119, 182, 0.4)" }}
             whileTap={{ scale: 0.98 }}
           >
             <Plus size={18} />
@@ -60,7 +60,7 @@ function Sidebar({ isOpen, toggleSidebar, savedTrips, loadTrip, startNewTrip }) 
         <div className="flex-1 overflow-y-auto px-4 pb-4 space-y-2">
           {savedTrips.length === 0 ? (
             <div className="text-center py-12">
-              <div className="w-14 h-14 rounded-2xl mx-auto mb-3 flex items-center justify-center" style={{ background: "rgba(14, 165, 233, 0.08)" }}>
+              <div className="w-14 h-14 rounded-2xl mx-auto mb-3 flex items-center justify-center" style={{ background: "rgba(0, 119, 182, 0.08)" }}>
                 <MapPin size={24} className="text-sky-300" />
               </div>
               <p className="text-sm font-medium" style={{ color: "var(--text-muted)" }}>No saved trips yet.</p>
@@ -73,13 +73,13 @@ function Sidebar({ isOpen, toggleSidebar, savedTrips, loadTrip, startNewTrip }) 
                 onClick={() => { loadTrip(trip.id); toggleSidebar(); }}
                 className="w-full text-left p-4 rounded-xl transition-all cursor-pointer group"
                 style={{ border: "1px solid var(--border)", background: "var(--bg-card)" }}
-                whileHover={{ y: -1, boxShadow: "var(--shadow-md)", borderColor: "rgba(14, 165, 233, 0.3)" }}
+                whileHover={{ y: -1, boxShadow: "var(--shadow-md)", borderColor: "rgba(0, 119, 182, 0.3)" }}
                 initial={{ opacity: 0, x: -12 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: index * 0.05, duration: 0.3 }}
               >
                 <div className="flex items-start gap-3">
-                  <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 mt-0.5 transition-colors" style={{ background: "rgba(14, 165, 233, 0.08)" }}>
+                  <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 mt-0.5 transition-colors" style={{ background: "rgba(0, 119, 182, 0.08)" }}>
                     <MapPin size={16} className="text-sky-500 group-hover:text-sky-600 transition-colors" />
                   </div>
                   <div className="min-w-0">

@@ -1,30 +1,72 @@
+import { useState } from "react";
 import { motion } from "framer-motion";
 import { Globe, Users, Heart, MapPin, Sparkles, ArrowRight } from "lucide-react";
 import DateRangeInput from "../DateRangeInput";
 import { fadeInUp } from "../../utils/constants";
 
 export default function TripForm({ formData, dateRange, error, onFormChange, onDateChange, onSubmit }) {
+  const [fieldErrors, setFieldErrors] = useState({});
+
+  const validate = () => {
+    const errors = {};
+    if (!formData.destination || formData.destination.trim().length < 2)
+      errors.destination = "Please enter a destination (e.g. Tokyo, Japan).";
+    if (!formData.origin || formData.origin.trim().length < 2)
+      errors.origin = "Please enter your departure city.";
+    if (!dateRange[0] || !dateRange[1])
+      errors.dates = "Please select your travel dates.";
+    else if (dateRange[1] < dateRange[0])
+      errors.dates = "Return date must be after departure date.";
+    return errors;
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    const errors = validate();
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
+      return;
+    }
+    setFieldErrors({});
+    onSubmit(e);
+  };
+
+  const clearFieldError = (field) => {
+    if (fieldErrors[field]) setFieldErrors((prev) => { const next = { ...prev }; delete next[field]; return next; });
+  };
   return (
     <motion.form
       variants={fadeInUp}
       custom={3}
-      onSubmit={onSubmit}
+      onSubmit={handleSubmit}
       className="w-full max-w-3xl rounded-3xl p-6 md:p-10 space-y-5 glass-heavy"
       style={{ boxShadow: "var(--shadow-lg)", borderRadius: "var(--radius-lg)" }}
     >
       {/* Row 1: Destination + Days + Guests */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="relative group">
-          <Globe size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sky-400 transition-colors group-focus-within:text-sky-600" />
-          <input type="text" name="destination" value={formData.destination} onChange={onFormChange} placeholder="Where to?" required
-            className="w-full pl-10 pr-4 py-3.5 rounded-xl bg-white border border-slate-200 text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-400/30 focus:border-sky-400 transition-all font-medium text-sm" />
+        <div>
+          <div className="relative group">
+            <Globe size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sky-400 transition-colors group-focus-within:text-sky-600" />
+            <input type="text" name="destination" value={formData.destination} onChange={(e) => { onFormChange(e); clearFieldError("destination"); }} placeholder="Where to?" required
+              className={`w-full pl-10 pr-4 py-3.5 rounded-xl bg-white border text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-400/30 focus:border-sky-400 transition-all font-medium text-sm ${
+                fieldErrors.destination ? "border-red-400 ring-1 ring-red-300" : "border-slate-200"
+              }`} />
+          </div>
+          {fieldErrors.destination && (
+            <p className="text-red-500 text-[11px] mt-1 ml-1 font-medium">{fieldErrors.destination}</p>
+          )}
         </div>
-        <div className="relative group w-full h-[52px]">
-          <DateRangeInput 
-            startDate={dateRange[0]} 
-            endDate={dateRange[1]} 
-            onChange={onDateChange} 
-          />
+        <div className="relative group w-full">
+          <div className="h-[52px]">
+            <DateRangeInput
+              startDate={dateRange[0]}
+              endDate={dateRange[1]}
+              onChange={(update) => { onDateChange(update); clearFieldError("dates"); }}
+            />
+          </div>
+          {fieldErrors.dates && (
+            <p className="text-red-500 text-[11px] mt-1 ml-1 font-medium">{fieldErrors.dates}</p>
+          )}
         </div>
         <div className="relative group">
           <Users size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sky-400 transition-colors group-focus-within:text-sky-600" />
@@ -80,10 +122,17 @@ export default function TripForm({ formData, dateRange, error, onFormChange, onD
           <input type="text" name="interests" value={formData.interests} onChange={onFormChange} placeholder="Interests (Optional)"
             className="w-full pl-10 pr-4 py-3.5 rounded-xl bg-white border border-slate-200 text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-400/30 focus:border-sky-400 transition-all font-medium text-sm" />
         </div>
-        <div className="relative group">
-          <MapPin size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sky-400 transition-colors group-focus-within:text-sky-600" />
-          <input type="text" name="origin" value={formData.origin} onChange={onFormChange} placeholder="Start Location (Needed for Flights)" required
-            className="w-full pl-10 pr-4 py-3.5 rounded-xl bg-white border border-slate-200 text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-400/30 focus:border-sky-400 transition-all font-medium text-sm" />
+        <div>
+          <div className="relative group">
+            <MapPin size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sky-400 transition-colors group-focus-within:text-sky-600" />
+            <input type="text" name="origin" value={formData.origin} onChange={(e) => { onFormChange(e); clearFieldError("origin"); }} placeholder="Start Location (Needed for Flights)" required
+              className={`w-full pl-10 pr-4 py-3.5 rounded-xl bg-white border text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-400/30 focus:border-sky-400 transition-all font-medium text-sm ${
+                fieldErrors.origin ? "border-red-400 ring-1 ring-red-300" : "border-slate-200"
+              }`} />
+          </div>
+          {fieldErrors.origin && (
+            <p className="text-red-500 text-[11px] mt-1 ml-1 font-medium">{fieldErrors.origin}</p>
+          )}
         </div>
       </div>
 

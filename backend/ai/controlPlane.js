@@ -3,6 +3,8 @@ const { getCoordinates } = require('../tools/geocode');
 const { findFlights } = require('../tools/flights');
 const { searchWeb } = require('../tools/search');
 const { searchHotels } = require('../tools/hotels');
+const { ToolRequestSchema } = require('./schemas');
+const { withRetry } = require('../utils/retry');
 
 // The Control Plane uses a faster, smaller model strictly for tool orchestration
 const cpLLM = new ChatGroq({
@@ -58,12 +60,37 @@ Output ONLY valid JSON, no markdown blocks or conversational text. Example: [{"t
     const plannerResult = await cpLLM.invoke([{ role: 'user', content: plannerPrompt }]);
     
     // Clean response of any markdown formatting
-    const rawPlannerResult = typeof plannerResult.content === 'string' ? plannerResult.content : plannerResult.content[0].text;
-    const cleanJsonString = rawPlannerResult.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
-    
-    const toolRequests = JSON.parse(cleanJsonString);
-    console.log(`[Control Plane - 8b] Planner proposed ${toolRequests.length} tool calls.`);
+    const rawPlannerResult = typeof plannerResult.content === 'string'
+      ? plannerResult.content
+      : plannerResult.content[0].text;
+    const cleanJsonString = rawPlannerResult
+      .replace(/```json\s*/gi, '')
+      .replace(/```\s*/g, '')
+      .trim();
 
+    // ── Structured validation (replaces raw JSON.parse) ──────────────────────
+    let toolRequests;
+    try {
+      const parsed = JSON.parse(cleanJsonString);
+      const validated = ToolRequestSchema.safeParse(parsed);
+
+      if (validated.success) {
+        toolRequests = validated.data;
+      } else {
+        // Log issues but degrade gracefully — run whatever valid entries exist
+        console.warn('[Control Plane - 8b] Schema validation issues:', validated.error.flatten());
+        // Filter the raw parsed array to only valid entries
+        toolRequests = Array.isArray(parsed)
+          ? parsed.filter(r => r.toolName && toolRegistry[r.toolName] && r.params)
+          : [];
+      }
+    } catch (parseErr) {
+      console.error('[Control Plane - 8b] Failed to parse planner JSON:', parseErr.message);
+      console.error('[Control Plane - 8b] Raw planner output:', rawPlannerResult);
+      toolRequests = [];
+    }
+
+    console.log(`[Control Plane - 8b] Planner proposed ${toolRequests.length} tool calls.`);
     onEvent?.("status", { phase: "fetching", message: `Fetching data from ${toolRequests.length} sources...` });
 
     console.log('[Control Plane - 8b] Executing tools in parallel...');
@@ -80,17 +107,22 @@ Output ONLY valid JSON, no markdown blocks or conversational text. Example: [{"t
         onEvent?.("tool_start", { tool: toolName, label, params });
 
         try {
-          const result = await toolFn(params);
-          
+          // ── Retry with exponential backoff (3 attempts: 500ms → 1s → 2s) ──
+          const result = await withRetry(
+            () => toolFn(params),
+            { maxAttempts: 3, baseDelayMs: 500, label: `${toolName}` }
+          );
+
           // Emit tool_complete with a preview of the results
           const preview = buildToolPreview(toolName, result);
           onEvent?.("tool_complete", { tool: toolName, label, preview });
           
           return { tool: toolName, params, result };
         } catch (err) {
-          console.error(`[Control Plane - 8b] Tool ${toolName} failed:`, err.message);
+          console.error(`[Control Plane - 8b] Tool ${toolName} failed after retries:`, err.message);
           onEvent?.("tool_error", { tool: toolName, label, error: err.message });
-          return { tool: toolName, params, error: `Failed to fetch data: ${err.message}` };
+          // Mark with _dataUnavailable so Boss discloses failure rather than fabricating silently
+          return { tool: toolName, params, error: `Failed to fetch data: ${err.message}`, _dataUnavailable: true };
         }
       })
     );

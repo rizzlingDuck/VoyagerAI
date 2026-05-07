@@ -20,12 +20,12 @@ const OverviewCard = forwardRef(function OverviewCard({ itinerary }, ref) {
         {itinerary.overview && <p className="text-sm leading-relaxed" style={{ color: "var(--text-muted)" }}>{itinerary.overview}</p>}
         <div className="flex flex-wrap gap-2">
           {itinerary.currency && (
-            <span className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full font-medium" style={{ background: "rgba(14, 165, 233, 0.08)", color: "var(--primary-dark)" }}>
+            <span className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full font-medium" style={{ background: "rgba(0, 119, 182, 0.08)", color: "var(--primary-dark)" }}>
               <Banknote size={12} /> {itinerary.currency}
             </span>
           )}
           {itinerary.timezone && (
-            <span className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full font-medium" style={{ background: "rgba(14, 165, 233, 0.08)", color: "var(--primary-dark)" }}>
+            <span className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full font-medium" style={{ background: "rgba(0, 119, 182, 0.08)", color: "var(--primary-dark)" }}>
               <Clock size={12} /> {itinerary.timezone}
             </span>
           )}

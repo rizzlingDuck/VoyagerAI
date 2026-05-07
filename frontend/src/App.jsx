@@ -5,6 +5,7 @@ import { differenceInDays, format } from "date-fns";
 import LandingPage from "./components/landing/LandingPage";
 import StreamingLoader from "./components/common/StreamingLoader";
 import ItineraryView from "./components/itinerary/ItineraryView";
+import ErrorBoundary from "./components/common/ErrorBoundary";
 import useSavedTrips from "./hooks/useSavedTrips";
 import useStreamingTrip from "./hooks/useStreamingTrip";
 
@@ -108,20 +109,22 @@ function App() {
 
   // ─── Itinerary View ───
   return (
-    <ItineraryView
-      itinerary={displayedItinerary}
-      isSaved={isSaved}
-      activeDay={activeDay}
-      setActiveDay={setActiveDay}
-      sidebarOpen={sidebarOpen}
-      savedTrips={savedTrips}
-      onSave={handleSave}
-      onNewTrip={handleNewTrip}
-      onOpenSidebar={() => setSidebarOpen(true)}
-      onCloseSidebar={() => setSidebarOpen(false)}
-      onLoadTrip={handleLoadTrip}
-      onStartNewTrip={handleNewTrip}
-    />
+    <ErrorBoundary onReset={handleNewTrip}>
+      <ItineraryView
+        itinerary={displayedItinerary}
+        isSaved={isSaved}
+        activeDay={activeDay}
+        setActiveDay={setActiveDay}
+        sidebarOpen={sidebarOpen}
+        savedTrips={savedTrips}
+        onSave={handleSave}
+        onNewTrip={handleNewTrip}
+        onOpenSidebar={() => setSidebarOpen(true)}
+        onCloseSidebar={() => setSidebarOpen(false)}
+        onLoadTrip={handleLoadTrip}
+        onStartNewTrip={handleNewTrip}
+      />
+    </ErrorBoundary>
   );
 }
 

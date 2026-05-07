@@ -19,7 +19,7 @@ export default function TopBar({ isSaved, sidebarOpen, onSave, onNewTrip, onOpen
               ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
               : "text-white border-none"
           }`}
-          style={!isSaved ? { background: "linear-gradient(135deg, var(--primary), var(--primary-dark))", boxShadow: "0 2px 8px rgba(14, 165, 233, 0.3)" } : {}}
+          style={!isSaved ? { background: "linear-gradient(135deg, var(--primary), var(--primary-dark))", boxShadow: "0 2px 8px rgba(0, 119, 182, 0.3)" } : {}}
           whileHover={!isSaved ? { scale: 1.03 } : {}}
           whileTap={!isSaved ? { scale: 0.97 } : {}}
         >
