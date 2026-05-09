@@ -18,7 +18,7 @@ export default function HotelsCard({ hotels }) {
               <span className="text-xs text-emerald-600 font-medium flex items-center gap-1"><Star size={10} fill="currentColor" /> {h.rating}</span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-xs px-2.5 py-1 rounded-full font-medium" style={{ background: "rgba(139, 92, 246, 0.08)", color: "#6B21A8" }}>{h.price} {h.currency}</span>
+              <span className="text-xs px-2.5 py-1 rounded-full font-medium" style={{ background: "rgba(139, 92, 246, 0.08)", color: "#6B21A8" }}>{h.pricePerNight || h.price || 'N/A'} {h.currency}/night</span>
               {h.url && (
                 <a href={h.url} target="_blank" rel="noopener noreferrer"
                   className="text-xs font-bold text-white px-3 py-1 rounded-full hover:opacity-90 transition-opacity cursor-pointer"

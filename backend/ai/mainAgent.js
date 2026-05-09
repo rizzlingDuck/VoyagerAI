@@ -3,6 +3,7 @@ const { tool } = require("@langchain/core/tools");
 const { z } = require("zod");
 const { ask_control_plane } = require("./controlPlane");
 const { ItinerarySchema } = require("./schemas");
+const { calculateBudget } = require("./budgetCalculator");
 
 // The Main Agent ('The Boss') uses the powerful versatile model for reasoning and synthesis
 const bossLLM = new ChatGroq({
@@ -78,7 +79,7 @@ Pass a detailed query explaining exactly what you need compiled for this trip.`;
     // ==========================================
     onEvent?.("status", { phase: "synthesizing", message: "Crafting your personalized itinerary..." });
 
-    const synthesizerPrompt = buildSynthesizerPrompt(rawToolData, destination, days, startDate, endDate, pace, guests, interests);
+    const synthesizerPrompt = buildSynthesizerPrompt(rawToolData, destination, days, startDate, endDate, pace, guests, interests, budgetLevel);
 
     console.log('[Main Agent - Boss] Performing final synthesis based on gathered data...');
     const synthesizerResult = await bossLLM.invoke([{ role: 'user', content: synthesizerPrompt }]);
@@ -91,6 +92,18 @@ Pass a detailed query explaining exactly what you need compiled for this trip.`;
     // ── Structured validation (replaces raw JSON.parse) ──────────────────────
     console.log('[Main Agent - Boss] Parsing and validating final itinerary...');
     let finalItinerary = await parseAndValidateItinerary(cleanFinalJson, destination, days, startDate, endDate, pace, guests, interests);
+
+    // ── Deterministic budget override ────────────────────────────────────────
+    // The LLM cannot do arithmetic reliably — compute the real total server-side.
+    try {
+      const { formatted, breakdown } = calculateBudget(finalItinerary);
+      finalItinerary.budget_used = formatted;
+      finalItinerary.budget_breakdown = breakdown;
+      console.log(`[Main Agent - Boss] Budget overridden: ${formatted}`);
+    } catch (budgetErr) {
+      console.warn('[Main Agent - Boss] Budget calculator failed:', budgetErr.message);
+      // Keep whatever the LLM produced as fallback
+    }
 
     return finalItinerary;
 
@@ -213,16 +226,56 @@ Output ONLY valid JSON that satisfies the schema. No markdown, no commentary.`;
   }
 }
 
-function buildSynthesizerPrompt(rawToolData, destination, days, startDate, endDate, pace, guests, interests) {
+function buildSynthesizerPrompt(rawToolData, destination, days, startDate, endDate, pace, guests, interests, budgetLevel) {
+  // Map budget level to concrete price anchors
+  const budgetAnchors = {
+    '$': {
+      label: 'Budget',
+      meals: '$3-10 per meal',
+      attractions: 'mostly free or under $10',
+      transport: '$1-5 local transport',
+      hotelHint: 'Use the cheapest hotel option from the data.',
+    },
+    '$$': {
+      label: 'Mid-range',
+      meals: '$10-25 per meal',
+      attractions: '$5-20 per attraction',
+      transport: '$5-15 taxi/rideshare',
+      hotelHint: 'Use a moderately priced hotel from the data.',
+    },
+    '$$$': {
+      label: 'Luxury',
+      meals: '$30-80 per meal',
+      attractions: '$20-100 premium experiences',
+      transport: '$20-50 private transport',
+      hotelHint: 'Use the highest-rated hotel from the data.',
+    },
+  };
+  const anchors = budgetAnchors[budgetLevel] || budgetAnchors['$$'];
+
   return `Here is the real-world data fetched by your Control Plane:
 ${rawToolData}
 
-Note: Any tool result with "_dataUnavailable: true" means that data source failed after multiple retries. For those sections, clearly mark the data as estimated (e.g., "~$500 est." for prices) rather than presenting it as real.
+IMPORTANT DATA NOTES:
+- Any tool result with "_dataUnavailable: true" means that data source failed. For those sections, prefix prices with "~" (e.g., "~$50") and add "_estimated": true to the item.
+- Flight prices from the API are ROUND-TRIP totals (not one-way). Do NOT double them.
+- Hotel prices include "pricePerNight" (per-night rate) and "priceTotal" (total stay). Use pricePerNight in the output.
+- When fabricating placeholder data for failed sources, use conservative estimates appropriate for ${destination}, NOT US-centric defaults.
 
-Using this data, create a detailed, day-by-day JSON itinerary for a trip to ${destination}. If any tool data is empty, errored, or missing, you MUST fabricate realistic placeholder data (e.g., invent 2-3 plausible airlines with estimated prices for flights, and 2-3 plausible hotels with estimated nightly rates). The flights and hotels arrays must NEVER be empty.
+Using this data, create a detailed, day-by-day JSON itinerary for a trip to ${destination}. The flights and hotels arrays must NEVER be empty — if real data is missing, create realistic estimates marked with "_estimated": true.
+
+## Budget Calibration
+Budget level: ${anchors.label} (${budgetLevel || '$$'})
+Use these cost anchors for activities:
+- Meals: ${anchors.meals}
+- Attractions/activities: ${anchors.attractions}
+- Local transport: ${anchors.transport}
+- ${anchors.hotelHint}
+
+IMPORTANT: Scale these costs DOWN for affordable destinations (SE Asia, India, Eastern Europe, Latin America). Scale UP for expensive cities (Tokyo, London, Zurich, NYC). The costs must feel realistic for ${destination} specifically.
 
 ## Strict Constraints
-${pace ? `- You must strictly adhere to the user's Pace setting: ${pace}. If Relax, max 2 activities a day. If Active, pack the schedule.` : ''}
+${pace ? `- You must strictly adhere to the user's Pace setting: ${pace}. If Relax, max 2-3 activities a day. If Active, pack the schedule.` : ''}
 ${guests ? `- Tailor the language and activity selection to the Guest type: ${guests}.` : ''}
 ${interests ? `- Filter the gathered data to match the Interests: ${interests}.` : ''}
 
@@ -242,7 +295,7 @@ Ensure the output STRICTLY matches this exact JSON schema:
     { "airline": "Airline Name", "price": 100, "currency": "USD", "departureDate": "YYYY-MM-DD", "returnDate": "YYYY-MM-DD" }
   ],
   "hotels": [
-    { "name": "Hotel Name", "rating": "5", "price": 100, "currency": "USD", "lat": latitude_number, "lng": longitude_number, "url": "https://booking.com/..." }
+    { "name": "Hotel Name", "rating": "5", "pricePerNight": 100, "priceTotal": 500, "currency": "USD", "lat": latitude_number, "lng": longitude_number, "url": "https://booking.com/..." }
   ],
   "days": [
     {
@@ -269,10 +322,11 @@ Ensure the output STRICTLY matches this exact JSON schema:
 - Each activity MUST have a "category" field. Valid categories: "attraction", "breakfast", "lunch", "dinner", "transport", "shopping", "nature", "nightlife".
 - Each activity MUST have an "endTime" field showing the estimated end time.
 - Each activity MUST have a "distance_km" field showing the walking/driving distance from the PREVIOUS activity in that day (first activity of the day should be 0.0).
+- Each activity MUST have a "cost" field. Use "Free" for no-cost activities, "$X" for paid ones. Base ALL costs on the Budget Calibration anchors above. Do NOT default to expensive prices.
 - The mapMarkers array must combine the coordinates from the hotel data and all the geocoded activities. For hotels set "type": "hotel". For activities set "type": "activity" and include the "day" number.
-- The flights array MUST contain at least 2 flight options spanning the specific requested dates (${startDate} to ${endDate}). Include the exact flight prices and airline names from the fetched API data. If fetched data fails, fabricate realistic estimates.
-- The hotels array MUST contain at least 2 hotel options. Use gathered data if available, otherwise fabricate realistic estimates.
-- The budget_used MUST be a realistic sum of the flights, estimated hotels, and all listed daily activity costs combined. Keep the estimate affordable and mathematically logical. Do not use generic high defaults.
+- The flights array MUST contain at least 2 flight options spanning the specific requested dates (${startDate} to ${endDate}). These are ROUND-TRIP prices. Include the exact flight prices and airline names from the fetched API data. If fetched data fails, fabricate realistic estimates.
+- The hotels array MUST contain at least 2 hotel options with both pricePerNight and priceTotal. Use gathered data if available, otherwise fabricate realistic estimates.
+- The budget_used field is a placeholder — it will be overridden server-side. Just put a rough estimate.
 - Output ONLY valid JSON, no markdown blocks or conversational text.`;
 }
 

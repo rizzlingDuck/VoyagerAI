@@ -1,8 +1,12 @@
+import { useState } from "react";
 import { forwardRef } from "react";
-import { motion } from "framer-motion";
-import { Banknote, Clock } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Banknote, Clock, Info, ChevronDown, ChevronUp, Plane, Bed, MapPin } from "lucide-react";
 
 const OverviewCard = forwardRef(function OverviewCard({ itinerary }, ref) {
+  const [showBreakdown, setShowBreakdown] = useState(false);
+  const bd = itinerary.budget_breakdown;
+
   return (
     <motion.div
       ref={ref}
@@ -30,6 +34,50 @@ const OverviewCard = forwardRef(function OverviewCard({ itinerary }, ref) {
             </span>
           )}
         </div>
+
+        {/* Budget Breakdown Accordion */}
+        {bd && bd.total > 0 && (
+          <div className="mt-2">
+            <button
+              onClick={() => setShowBreakdown(!showBreakdown)}
+              className="flex items-center gap-1.5 text-xs font-medium cursor-pointer hover:underline transition-all"
+              style={{ color: "var(--primary)" }}
+            >
+              <Info size={12} />
+              How is this budget calculated?
+              {showBreakdown ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+            </button>
+            <AnimatePresence>
+              {showBreakdown && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="mt-2 p-3 rounded-xl text-xs space-y-1.5"
+                  style={{ background: "rgba(0, 119, 182, 0.04)", border: "1px solid var(--border)" }}
+                >
+                  <div className="flex items-center justify-between" style={{ color: "var(--text-muted)" }}>
+                    <span className="flex items-center gap-1.5"><Plane size={11} /> Cheapest flight (round-trip)</span>
+                    <span className="font-semibold" style={{ color: "var(--text)" }}>${bd.flight.toLocaleString()}</span>
+                  </div>
+                  <div className="flex items-center justify-between" style={{ color: "var(--text-muted)" }}>
+                    <span className="flex items-center gap-1.5"><Bed size={11} /> Hotel (${bd.hotelPerNight}/night × {bd.hotelNights} nights)</span>
+                    <span className="font-semibold" style={{ color: "var(--text)" }}>${bd.hotelTotal.toLocaleString()}</span>
+                  </div>
+                  <div className="flex items-center justify-between" style={{ color: "var(--text-muted)" }}>
+                    <span className="flex items-center gap-1.5"><MapPin size={11} /> Activities & meals</span>
+                    <span className="font-semibold" style={{ color: "var(--text)" }}>${bd.activities.toLocaleString()}</span>
+                  </div>
+                  <div className="pt-1.5 mt-1.5 flex items-center justify-between font-semibold" style={{ borderTop: "1px solid var(--border)", color: "var(--primary-dark)" }}>
+                    <span>Total estimated</span>
+                    <span>${bd.total.toLocaleString()}</span>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        )}
       </div>
     </motion.div>
   );

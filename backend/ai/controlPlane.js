@@ -142,11 +142,12 @@ function buildToolPreview(toolName, result) {
   try {
     switch (toolName) {
       case "findFlights": {
-        if (!result || !result.flights) return { count: 0, summary: "No flights found" };
-        const flights = result.flights.slice(0, 3);
+        const flights = result?.flights || [];
+        if (flights.length === 0) return { count: 0, summary: "No flights found" };
         return {
-          count: result.flights.length,
-          items: flights.map(f => ({
+          count: flights.length,
+          tripType: result.tripType || "unknown",
+          items: flights.slice(0, 3).map(f => ({
             airline: f.airline || "Unknown",
             price: f.price || "N/A",
             currency: f.currency || "USD",
@@ -161,17 +162,18 @@ function buildToolPreview(toolName, result) {
           items: hotels.map(h => ({
             name: h.name || "Unknown",
             rating: h.rating || "N/A",
-            price: h.price || "N/A",
+            pricePerNight: h.pricePerNight || "N/A",
           })),
         };
       }
       case "getCoordinates": {
         if (!result) return { summary: "Location not found" };
+        if (Array.isArray(result)) return { lat: result[0], lng: result[1], summary: "Found" };
         return { lat: result.lat, lng: result.lng, name: result.display_name || "Found" };
       }
       case "searchWeb": {
-        if (!result || !result.results) return { count: 0, summary: "No results" };
-        return { count: result.results.length, summary: `Found ${result.results.length} sources` };
+        if (!result || !Array.isArray(result)) return { count: 0, summary: "No results" };
+        return { count: result.length, summary: `Found ${result.length} sources` };
       }
       default:
         return { summary: "Completed" };

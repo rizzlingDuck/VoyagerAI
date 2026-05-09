@@ -32,7 +32,9 @@ const FlightSchema = z.object({
 const HotelSchema = z.object({
   name: z.string(),
   rating: z.union([z.number(), z.string()]),
-  price: z.union([z.number(), z.string()]),
+  price: z.union([z.number(), z.string()]).optional(),
+  pricePerNight: z.union([z.number(), z.string()]).optional(),
+  priceTotal: z.union([z.number(), z.string()]).optional(),
   currency: z.string(),
   lat: z.number(),
   lng: z.number(),
@@ -49,6 +51,7 @@ const ActivitySchema = z.object({
   ]),
   description: z.string(),
   cost: z.string().optional(),
+  _estimated: z.boolean().optional(),
   coordinates: z.tuple([z.number(), z.number()]),
   distance_km: z.number().optional(),
 });

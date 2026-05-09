@@ -17,14 +17,20 @@ async function findFlights({ originCode, destCode, departureDate, returnDate }) 
     // API returns: { data: { itineraries: { topFlights: [...] } } }
     const topFlights = jsonData.data?.itineraries?.topFlights || [];
 
-    return topFlights.slice(0, 3).map(flight => ({
+    const flights = topFlights.slice(0, 3).map(flight => ({
       airline: flight.flights?.[0]?.airline || 'Unknown Airline',
       price: flight.price || null,
       currency: 'USD'
     }));
+
+    // Wrap in a structured object so consumers know the trip type
+    return {
+      flights,
+      tripType: returnDate ? 'round-trip' : 'one-way',
+    };
   } catch (error) {
     console.error('Error fetching flights:', error);
-    return [];
+    return { flights: [], tripType: returnDate ? 'round-trip' : 'one-way' };
   }
 }
 

@@ -47,6 +47,12 @@ async function searchHotels({ locationName, budgetLevel, checkinDate, checkoutDa
       checkoutStr = formatDt(checkout);
     }
 
+    // Calculate number of nights for per-night price derivation
+    const numNights = Math.max(
+      Math.ceil((new Date(checkoutStr) - new Date(checkinStr)) / (1000 * 60 * 60 * 24)),
+      1
+    );
+
     let orderBy = 'popularity';
     if (budgetLevel === '$') orderBy = 'price';
     else if (budgetLevel === '$$$') orderBy = 'class_descending';
@@ -67,17 +73,32 @@ async function searchHotels({ locationName, budgetLevel, checkinDate, checkoutDa
     }
 
     // ==========================================
-    // FORMATTING: Top 3 Hotels
+    // FORMATTING: Top 3 Hotels with explicit pricing
     // ==========================================
-    return searchData.result.slice(0, 3).map(hotel => ({
-      name: hotel.hotel_name,
-      rating: hotel.review_score_word ? `${hotel.review_score} (${hotel.review_score_word})` : hotel.review_score || 'N/A',
-      price: hotel.gross_price || hotel.composite_price_breakdown?.gross_amount_per_night?.value || 'N/A',
-      currency: hotel.currency_code || hotel.currency || 'USD',
-      lat: hotel.latitude,
-      lng: hotel.longitude,
-      url: hotel.url || null
-    }));
+    return searchData.result.slice(0, 3).map(hotel => {
+      // Booking.com returns gross_price as total-stay price
+      const totalStay = parseFloat(hotel.gross_price) || null;
+      const perNightFromAPI = parseFloat(
+        hotel.composite_price_breakdown?.gross_amount_per_night?.value
+      ) || null;
+
+      // Derive per-night if only total is available, or vice versa
+      const pricePerNight = perNightFromAPI || (totalStay ? Math.round(totalStay / numNights) : null);
+      const priceTotal = totalStay || (perNightFromAPI ? Math.round(perNightFromAPI * numNights) : null);
+
+      return {
+        name: hotel.hotel_name,
+        rating: hotel.review_score_word
+          ? `${hotel.review_score} (${hotel.review_score_word})`
+          : hotel.review_score || 'N/A',
+        pricePerNight: pricePerNight || 'N/A',
+        priceTotal: priceTotal || 'N/A',
+        currency: hotel.currency_code || hotel.currency || 'USD',
+        lat: hotel.latitude,
+        lng: hotel.longitude,
+        url: hotel.url || null
+      };
+    });
 
   } catch (error) {
     console.error('[Hotels Tool] Error searching hotels:', error.message);
