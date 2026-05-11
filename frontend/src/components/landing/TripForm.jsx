@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { motion } from "framer-motion";
 import { Globe, Users, Heart, MapPin, Sparkles, ArrowRight } from "lucide-react";
-import DateRangeInput from "../DateRangeInput";
 import { fadeInUp } from "../../utils/constants";
+
+const DateRangeInput = lazy(() => import("../DateRangeInput"));
 
 export default function TripForm({ formData, dateRange, error, onFormChange, onDateChange, onSubmit }) {
   const [fieldErrors, setFieldErrors] = useState({});
@@ -39,38 +40,43 @@ export default function TripForm({ formData, dateRange, error, onFormChange, onD
       variants={fadeInUp}
       custom={3}
       onSubmit={handleSubmit}
-      className="w-full max-w-3xl rounded-3xl p-6 md:p-10 space-y-5 glass-heavy"
+      className="w-full max-w-3xl rounded-3xl p-4 sm:p-6 md:p-10 space-y-5 glass-heavy"
       style={{ boxShadow: "var(--shadow-lg)", borderRadius: "var(--radius-lg)" }}
     >
       {/* Row 1: Destination + Days + Guests */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div>
           <div className="relative group">
+            <label htmlFor="destination" className="sr-only">Destination</label>
             <Globe size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sky-400 transition-colors group-focus-within:text-sky-600" />
-            <input type="text" name="destination" value={formData.destination} onChange={(e) => { onFormChange(e); clearFieldError("destination"); }} placeholder="Where to?" required
+            <input id="destination" type="text" name="destination" value={formData.destination} onChange={(e) => { onFormChange(e); clearFieldError("destination"); }} placeholder="Where to?" required aria-invalid={Boolean(fieldErrors.destination)} aria-describedby={fieldErrors.destination ? "destination-error" : undefined}
               className={`w-full pl-10 pr-4 py-3.5 rounded-xl bg-white border text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-400/30 focus:border-sky-400 transition-all font-medium text-sm ${
                 fieldErrors.destination ? "border-red-400 ring-1 ring-red-300" : "border-slate-200"
               }`} />
           </div>
           {fieldErrors.destination && (
-            <p className="text-red-500 text-[11px] mt-1 ml-1 font-medium">{fieldErrors.destination}</p>
+            <p id="destination-error" className="text-red-500 text-[11px] mt-1 ml-1 font-medium">{fieldErrors.destination}</p>
           )}
         </div>
         <div className="relative group w-full">
+          <label className="sr-only">Travel dates</label>
           <div className="h-[52px]">
-            <DateRangeInput
-              startDate={dateRange[0]}
-              endDate={dateRange[1]}
-              onChange={(update) => { onDateChange(update); clearFieldError("dates"); }}
-            />
+            <Suspense fallback={<DateInputFallback />}>
+              <DateRangeInput
+                startDate={dateRange[0]}
+                endDate={dateRange[1]}
+                onChange={(update) => { onDateChange(update); clearFieldError("dates"); }}
+              />
+            </Suspense>
           </div>
           {fieldErrors.dates && (
             <p className="text-red-500 text-[11px] mt-1 ml-1 font-medium">{fieldErrors.dates}</p>
           )}
         </div>
         <div className="relative group">
+          <label htmlFor="guests" className="sr-only">Guests</label>
           <Users size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sky-400 transition-colors group-focus-within:text-sky-600" />
-          <select name="guests" value={formData.guests} onChange={onFormChange}
+          <select id="guests" name="guests" value={formData.guests} onChange={onFormChange}
             className="w-full pl-10 pr-4 py-3.5 rounded-xl bg-white border border-slate-200 text-slate-800 focus:outline-none focus:ring-2 focus:ring-sky-400/30 focus:border-sky-400 transition-all font-medium text-sm appearance-none cursor-pointer">
             <option value="">Guests</option>
             <option value="solo">Solo</option>
@@ -83,12 +89,13 @@ export default function TripForm({ formData, dateRange, error, onFormChange, onD
 
       {/* Row 2: Budget + Pace */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <label className="text-[10px] font-bold tracking-[0.15em] uppercase mb-1.5 block" style={{ color: "var(--text-light)" }}>Budget</label>
-          <div className="flex gap-2">
+        <fieldset>
+          <legend className="text-[10px] font-bold tracking-[0.15em] uppercase mb-1.5 block" style={{ color: "var(--text-light)" }}>Budget</legend>
+          <div className="grid grid-cols-3 gap-2">
             {[{ val: "$", label: "Budget" }, { val: "$$", label: "Mid-range" }, { val: "$$$", label: "Luxury" }].map(b => (
               <button key={b.val} type="button" onClick={() => onFormChange({ target: { name: "budget", value: b.val } })}
-                className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all cursor-pointer border ${
+                aria-pressed={formData.budget === b.val}
+                className={`py-2.5 px-2 rounded-xl text-xs sm:text-sm font-semibold transition-all cursor-pointer border min-h-[42px] ${
                   formData.budget === b.val
                     ? "bg-sky-500 text-white border-sky-500 shadow-md shadow-sky-200"
                     : "bg-white text-slate-500 border-slate-200 hover:border-sky-300 hover:bg-sky-50"
@@ -97,13 +104,14 @@ export default function TripForm({ formData, dateRange, error, onFormChange, onD
               </button>
             ))}
           </div>
-        </div>
-        <div>
-          <label className="text-[10px] font-bold tracking-[0.15em] uppercase mb-1.5 block" style={{ color: "var(--text-light)" }}>Travel Pace</label>
-          <div className="flex gap-2">
+        </fieldset>
+        <fieldset>
+          <legend className="text-[10px] font-bold tracking-[0.15em] uppercase mb-1.5 block" style={{ color: "var(--text-light)" }}>Travel Pace</legend>
+          <div className="grid grid-cols-3 gap-2">
             {["Relax", "Normal", "Active"].map(p => (
               <button key={p} type="button" onClick={() => onFormChange({ target: { name: "pace", value: p.toLowerCase() } })}
-                className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all cursor-pointer border ${
+                aria-pressed={formData.pace === p.toLowerCase()}
+                className={`py-2.5 px-2 rounded-xl text-xs sm:text-sm font-semibold transition-all cursor-pointer border min-h-[42px] ${
                   formData.pace === p.toLowerCase()
                     ? "bg-sky-500 text-white border-sky-500 shadow-md shadow-sky-200"
                     : "bg-white text-slate-500 border-slate-200 hover:border-sky-300 hover:bg-sky-50"
@@ -112,26 +120,28 @@ export default function TripForm({ formData, dateRange, error, onFormChange, onD
               </button>
             ))}
           </div>
-        </div>
+        </fieldset>
       </div>
 
       {/* Row 3: Interests + Start Location */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="relative group">
+          <label htmlFor="interests" className="sr-only">Interests</label>
           <Heart size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sky-400 transition-colors group-focus-within:text-sky-600" />
-          <input type="text" name="interests" value={formData.interests} onChange={onFormChange} placeholder="Interests (Optional)"
+          <input id="interests" type="text" name="interests" value={formData.interests} onChange={onFormChange} placeholder="Interests (Optional)"
             className="w-full pl-10 pr-4 py-3.5 rounded-xl bg-white border border-slate-200 text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-400/30 focus:border-sky-400 transition-all font-medium text-sm" />
         </div>
         <div>
           <div className="relative group">
+            <label htmlFor="origin" className="sr-only">Start location</label>
             <MapPin size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sky-400 transition-colors group-focus-within:text-sky-600" />
-            <input type="text" name="origin" value={formData.origin} onChange={(e) => { onFormChange(e); clearFieldError("origin"); }} placeholder="Start Location (Needed for Flights)" required
+            <input id="origin" type="text" name="origin" value={formData.origin} onChange={(e) => { onFormChange(e); clearFieldError("origin"); }} placeholder="Start Location (Needed for Flights)" required aria-invalid={Boolean(fieldErrors.origin)} aria-describedby={fieldErrors.origin ? "origin-error" : undefined}
               className={`w-full pl-10 pr-4 py-3.5 rounded-xl bg-white border text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-400/30 focus:border-sky-400 transition-all font-medium text-sm ${
                 fieldErrors.origin ? "border-red-400 ring-1 ring-red-300" : "border-slate-200"
               }`} />
           </div>
           {fieldErrors.origin && (
-            <p className="text-red-500 text-[11px] mt-1 ml-1 font-medium">{fieldErrors.origin}</p>
+            <p id="origin-error" className="text-red-500 text-[11px] mt-1 ml-1 font-medium">{fieldErrors.origin}</p>
           )}
         </div>
       </div>
@@ -155,5 +165,17 @@ export default function TripForm({ formData, dateRange, error, onFormChange, onD
         <ArrowRight size={20} />
       </motion.button>
     </motion.form>
+  );
+}
+
+function DateInputFallback() {
+  return (
+    <button
+      type="button"
+      disabled
+      className="w-full h-full pl-4 pr-4 py-3.5 flex items-center rounded-xl bg-white border border-slate-200 text-slate-400 font-medium text-sm shadow-sm shadow-black/5"
+    >
+      Select dates
+    </button>
   );
 }

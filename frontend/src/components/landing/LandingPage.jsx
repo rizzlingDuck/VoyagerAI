@@ -4,13 +4,13 @@ import Sidebar from "../Sidebar";
 import TripForm from "./TripForm";
 import TypewriterHeading from "../common/TypewriterText";
 import { staggerContainer, fadeInUp } from "../../utils/constants";
-import { useAuth } from "../../context/AuthContext";
+import { useAuth } from "../../context/useAuth";
 
 export default function LandingPage({ formData, dateRange, error, sidebarOpen, savedTrips, onFormChange, onDateChange, onSubmit, onOpenSidebar, onCloseSidebar, onLoadTrip, onStartNewTrip, onOpenAuth }) {
   const { user, signOut } = useAuth();
   return (
-    <div className="min-h-screen relative overflow-hidden" style={{ background: "var(--bg)", color: "var(--text)" }}>
-      <Sidebar isOpen={sidebarOpen} toggleSidebar={onCloseSidebar} savedTrips={savedTrips} loadTrip={onLoadTrip} startNewTrip={onStartNewTrip} />
+    <div className="min-h-dvh relative overflow-x-hidden" style={{ background: "var(--bg)", color: "var(--text)" }}>
+      <Sidebar isOpen={sidebarOpen} toggleSidebar={onCloseSidebar} savedTrips={savedTrips} loadTrip={onLoadTrip} startNewTrip={onStartNewTrip} onOpenAuth={onOpenAuth} />
 
       {/* ─── Decorative Background ─── */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden="true">
@@ -20,43 +20,40 @@ export default function LandingPage({ formData, dateRange, error, sidebarOpen, s
       </div>
 
       {/* ─── Hero Section ─── */}
-      <div className="relative z-10 px-4 py-8 md:py-14">
+      <div className="relative z-10 px-4 sm:px-6 py-5 md:py-14">
         <motion.div
           className="max-w-5xl mx-auto flex flex-col items-center relative"
           variants={staggerContainer}
           initial="hidden"
           animate="visible"
         >
-          {/* Menu Button */}
-          <motion.button
-            variants={fadeInUp}
-            onClick={onOpenSidebar}
-            className="absolute left-0 top-0 p-2.5 rounded-xl hover:bg-sky-100/60 transition-colors cursor-pointer"
-            aria-label="Open sidebar"
-          >
-            <Menu size={24} style={{ color: "var(--text)" }} />
-          </motion.button>
+          <motion.div variants={fadeInUp} className="w-full flex items-center justify-between gap-3 mb-8 md:mb-3">
+            <button
+              onClick={onOpenSidebar}
+              className="p-2.5 rounded-xl hover:bg-sky-100/60 transition-colors cursor-pointer shrink-0"
+              aria-label="Open sidebar"
+            >
+              <Menu size={24} style={{ color: "var(--text)" }} />
+            </button>
 
-          {/* Auth Button (top-right) */}
-          <motion.div variants={fadeInUp} className="absolute right-0 top-0">
             {user ? (
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-medium hidden md:block" style={{ color: "var(--text-muted)" }}>
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="text-xs font-medium hidden sm:block truncate max-w-[12rem]" style={{ color: "var(--text-muted)" }}>
                   {user.email}
                 </span>
                 <button
                   onClick={signOut}
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold transition-colors cursor-pointer hover:bg-red-50"
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold transition-colors cursor-pointer hover:bg-red-50 shrink-0"
                   style={{ color: "var(--text-muted)" }}
                 >
                   <LogOut size={15} />
-                  <span className="hidden md:block">Sign out</span>
+                  <span className="hidden sm:block">Sign out</span>
                 </button>
               </div>
             ) : (
               <motion.button
                 onClick={onOpenAuth}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white cursor-pointer"
+                className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white cursor-pointer shrink-0"
                 style={{ background: "linear-gradient(135deg, var(--primary), var(--primary-dark))", boxShadow: "0 2px 10px rgba(14, 165, 233, 0.25)" }}
                 whileHover={{ scale: 1.03 }}
                 whileTap={{ scale: 0.97 }}
@@ -74,7 +71,7 @@ export default function LandingPage({ formData, dateRange, error, sidebarOpen, s
           </motion.div>
 
           {/* Heading */}
-          <motion.h1 variants={fadeInUp} custom={1} className="text-5xl md:text-7xl lg:text-[5rem] font-bold tracking-tight mb-5 text-center leading-[1.1] min-h-[120px] md:min-h-[180px] lg:min-h-[200px]" style={{ fontFamily: "var(--font-heading)", color: "var(--text)" }}>
+          <motion.h1 variants={fadeInUp} custom={1} className="text-[clamp(2.75rem,12vw,5rem)] md:text-7xl lg:text-[5rem] font-bold tracking-tight mb-5 text-center leading-[1.08] min-h-[7.5rem] sm:min-h-[8.5rem] md:min-h-[180px] lg:min-h-[200px] max-w-full break-words" style={{ fontFamily: "var(--font-heading)", color: "var(--text)" }}>
             <TypewriterHeading text1="Plan Your Dream" text2="Adventure" />
           </motion.h1>
 

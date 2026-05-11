@@ -2,6 +2,8 @@ import { useEffect, useRef, forwardRef, useImperativeHandle } from "react";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 
+mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN;
+
 const MapboxMap = forwardRef(function MapboxMap({ itinerary, activeDay, onMarkerClick }, ref) {
   const mapContainer = useRef(null);
   const map = useRef(null);
@@ -72,12 +74,20 @@ const MapboxMap = forwardRef(function MapboxMap({ itinerary, activeDay, onMarker
       inner.addEventListener("mouseleave", () => { inner.style.transform = "scale(1)"; });
       el.appendChild(inner);
 
-      const popup = new mapboxgl.Popup({ offset: 25, maxWidth: "260px" }).setHTML(`
-        <div style="font-family: 'Work Sans', sans-serif;">
-          <h3 style="margin: 0 0 4px; font-size: 14px; font-weight: 600; color: #0C4A6E;">${marker.title}</h3>
-          <span style="font-size: 11px; color: ${color}; font-weight: 600; text-transform: uppercase;">${isHotel ? "Hotel" : `Day ${marker.day || "?"} Activity`}</span>
-        </div>
-      `);
+      const popupContent = document.createElement("div");
+      popupContent.style.fontFamily = "'Work Sans', sans-serif";
+
+      const popupTitle = document.createElement("h3");
+      popupTitle.style.cssText = "margin: 0 0 4px; font-size: 14px; font-weight: 600; color: #0C4A6E;";
+      popupTitle.textContent = marker.title;
+
+      const popupType = document.createElement("span");
+      popupType.style.cssText = `font-size: 11px; color: ${color}; font-weight: 600; text-transform: uppercase;`;
+      popupType.textContent = isHotel ? "Hotel" : `Day ${marker.day || "?"} Activity`;
+
+      popupContent.append(popupTitle, popupType);
+
+      const popup = new mapboxgl.Popup({ offset: 25, maxWidth: "260px" }).setDOMContent(popupContent);
 
       const mapMarker = new mapboxgl.Marker(el).setLngLat([marker.lng, marker.lat]).setPopup(popup).addTo(mapInstance);
       inner.addEventListener("click", () => { if (onMarkerClick) onMarkerClick(marker); });
@@ -86,7 +96,7 @@ const MapboxMap = forwardRef(function MapboxMap({ itinerary, activeDay, onMarker
 
     map.current = mapInstance;
     return () => { if (map.current) { map.current.remove(); map.current = null; } };
-  }, [itinerary, activeDay]);
+  }, [itinerary, activeDay, onMarkerClick]);
 
   return <div ref={mapContainer} style={{ width: "100%", height: "100%" }} />;
 });

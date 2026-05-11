@@ -1,7 +1,7 @@
 import { motion } from "framer-motion";
 import { Menu, Bookmark, BookmarkCheck } from "lucide-react";
 
-export default function TopBar({ isSaved, sidebarOpen, onSave, onNewTrip, onOpenSidebar }) {
+export default function TopBar({ isSaved, onSave, onNewTrip, onOpenSidebar }) {
   return (
     <div className="shrink-0 px-4 py-3 flex items-center justify-between z-10 glass-heavy" style={{ borderBottom: "1px solid var(--border)" }}>
       <div className="flex items-center gap-3">

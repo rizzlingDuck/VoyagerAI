@@ -1,178 +1,127 @@
-const { ChatGroq } = require('@langchain/groq');
-const { tool } = require("@langchain/core/tools");
-const { z } = require("zod");
-const { ask_control_plane } = require("./controlPlane");
+const { ChatGroq } = require("@langchain/groq");
+const { gatherTripData } = require("./controlPlane");
 const { ItinerarySchema } = require("./schemas");
 const { calculateBudget } = require("./budgetCalculator");
+const { withTimeout } = require("../utils/timeout");
 
-// The Main Agent ('The Boss') uses the powerful versatile model for reasoning and synthesis
+const LLM_TIMEOUT_MS = Number(process.env.LLM_TIMEOUT_MS || 45000);
+
 const bossLLM = new ChatGroq({
   apiKey: process.env.GROQ_API_KEY,
   model: "llama-3.3-70b-versatile",
   modelName: "llama-3.3-70b-versatile",
-  temperature: 0
+  temperature: 0,
 });
 
-/**
- * Main orchestrator workflow.
- * @param {string} destination
- * @param {string} origin
- * @param {number} days
- * @param {Object} options
- * @param {Function} [onEvent] - Optional SSE callback for streaming progress
- */
-async function generateItinerary(destination, origin, days, options = {}, onEvent) {
+async function generateItinerary(destination, origin, days, options = {}, onEvent, signal) {
   const { interests, budgetLevel, pace, guests, startDate, endDate } = options;
-  const prefsText = [
-    guests ? `Travelers: ${guests}` : '',
-    budgetLevel ? `Budget level: ${budgetLevel}` : '',
-    pace ? `Travel pace: ${pace}` : '',
-    interests ? `Interests: ${interests}` : ''
-  ].filter(Boolean).join('. ');
-  
-  console.log(`\n[Main Agent - Boss] Starting CPaaT Workflow for ${destination} from ${origin || 'unspecified'} (${days} days)`);
-  
-  // Wrap the Control Plane as a LangChain Tool, passing through the onEvent callback
-  const controlPlaneTool = tool(
-    async ({ query }) => {
-      return await ask_control_plane({ query }, onEvent);
-    },
-    {
-      name: "ask_control_plane",
-      description: "Fetches all necessary real-world data (flights, hotels, map coordinates, web search). You MUST use this tool to gather information before creating the final itinerary.",
-      schema: z.object({
-        query: z.string().describe("A detailed instruction to the control plane about what data to fetch (e.g., 'Find flights from NYC to TYO, hotels in TYO, and exact coordinates for Tokyo Tower')."),
-      })
-    }
+
+  console.log(
+    `\n[Main Agent] Starting deterministic workflow for ${destination} from ${origin || "unspecified"} (${days} days)`
   );
 
-  // Bind the single tool to the Boss LLM
-  const bossWithTools = bossLLM.bindTools([controlPlaneTool]);
-
   try {
-    // ==========================================
-    // PHASE 1: BOSS REASONING & DATA DELEGATION
-    // ==========================================
-    onEvent?.("status", { phase: "reasoning", message: "AI is reasoning about your trip..." });
+    throwIfAborted(signal);
 
-    const userPrompt = `I want to travel${origin ? ` from ${origin}` : ''} to ${destination} for ${days} days. ${prefsText ? `Preferences: ${prefsText}.` : ''} 
-You are the Boss Agent. You MUST use the ask_control_plane tool to fetch real-world data (flights, hotels, locations, coordinates) for this trip. 
-The user is traveling exactly from ${startDate} to ${endDate}. When you ask the Control Plane for flight data, you MUST provide these exact dates.
-Pass a detailed query explaining exactly what you need compiled for this trip.`;
+    onEvent?.("status", {
+      phase: "reasoning",
+      message: "Gathering live travel data...",
+    });
 
-    console.log('[Main Agent - Boss] Evaluating task and invoking Control Plane...');
-    const msg1 = await bossWithTools.invoke([{ role: 'user', content: userPrompt }]);
-    
-    let rawToolData = "{}";
-    
-    if (msg1.tool_calls && msg1.tool_calls.length > 0) {
-      const toolCall = msg1.tool_calls[0];
-      console.log(`[Main Agent - Boss] Calling tool: ${toolCall.name} with query: "${toolCall.args.query}"`);
-      rawToolData = await controlPlaneTool.invoke(toolCall.args);
-    } else {
-      console.log('[Main Agent - Boss] WARNING: Boss decided not to use tool. Passing empty data.');
-      rawToolData = "[]";
-    }
+    const rawToolData = await gatherTripData(
+      { destination, origin, days, interests, budgetLevel, startDate, endDate, signal },
+      onEvent
+    );
 
-    // ==========================================
-    // PHASE 2: FINAL SYNTHESIS
-    // ==========================================
-    onEvent?.("status", { phase: "synthesizing", message: "Crafting your personalized itinerary..." });
+    throwIfAborted(signal);
 
-    const synthesizerPrompt = buildSynthesizerPrompt(rawToolData, destination, days, startDate, endDate, pace, guests, interests, budgetLevel);
+    onEvent?.("status", {
+      phase: "synthesizing",
+      message: "Crafting your personalized itinerary...",
+    });
 
-    console.log('[Main Agent - Boss] Performing final synthesis based on gathered data...');
-    const synthesizerResult = await bossLLM.invoke([{ role: 'user', content: synthesizerPrompt }]);
+    const synthesizerPrompt = buildSynthesizerPrompt(
+      rawToolData,
+      destination,
+      days,
+      startDate,
+      endDate,
+      pace,
+      guests,
+      interests,
+      budgetLevel
+    );
 
-    const rawSynthResult = typeof synthesizerResult.content === 'string'
-      ? synthesizerResult.content
-      : synthesizerResult.content[0].text;
-    const cleanFinalJson = rawSynthResult.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+    const synthesizerResult = await withTimeout(
+      bossLLM.invoke([{ role: "user", content: synthesizerPrompt }]),
+      LLM_TIMEOUT_MS,
+      "Itinerary synthesis"
+    );
 
-    // ── Structured validation (replaces raw JSON.parse) ──────────────────────
-    console.log('[Main Agent - Boss] Parsing and validating final itinerary...');
-    let finalItinerary = await parseAndValidateItinerary(cleanFinalJson, destination, days, startDate, endDate, pace, guests, interests);
+    throwIfAborted(signal);
 
-    // ── Deterministic budget override ────────────────────────────────────────
-    // The LLM cannot do arithmetic reliably — compute the real total server-side.
-    try {
-      const { formatted, breakdown } = calculateBudget(finalItinerary);
-      finalItinerary.budget_used = formatted;
-      finalItinerary.budget_breakdown = breakdown;
-      console.log(`[Main Agent - Boss] Budget overridden: ${formatted}`);
-    } catch (budgetErr) {
-      console.warn('[Main Agent - Boss] Budget calculator failed:', budgetErr.message);
-      // Keep whatever the LLM produced as fallback
-    }
+    const cleanFinalJson = extractContent(synthesizerResult)
+      .replace(/```json\s*/gi, "")
+      .replace(/```\s*/g, "")
+      .trim();
+
+    let finalItinerary = await parseAndValidateItinerary(
+      cleanFinalJson,
+      destination,
+      days,
+      startDate,
+      endDate,
+      pace,
+      guests,
+      interests
+    );
+
+    const { formatted, breakdown } = calculateBudget(finalItinerary);
+    finalItinerary.budget_used = formatted;
+    finalItinerary.budget_breakdown = breakdown;
 
     return finalItinerary;
-
   } catch (error) {
-    console.error('[Main Agent - Boss] Workflow Failed:', error);
-    
-    return {
-      destination: destination,
-      centerCoordinates: [0, 0],
-      budget_used: "Error retrieving data",
-      mapMarkers: [],
-      flights: [],
-      hotels: [],
-      days: [
-        {
-          day: 1,
-          theme: "API Overload Notice",
-          activities: [
-            {
-              time: "N/A",
-              location: "Error Generated Itinerary",
-              description: "Our AI systems experienced unexpected downtime running the CPaaT flow. Please try again later.",
-              cost: "$0",
-              coordinates: [0, 0],
-              category: "attraction",
-            }
-          ]
-        }
-      ]
-    };
+    console.error("[Main Agent] Workflow failed:", error);
+    throw error;
   }
 }
 
-/**
- * Attempt to parse + Zod-validate the itinerary JSON.
- * If validation fails, fire a repair prompt to the LLM once and try again.
- */
 async function parseAndValidateItinerary(rawJson, destination, days, startDate, endDate, pace, guests, interests) {
-  // ── First attempt ─────────────────────────────────────────────────────────
   try {
     const parsed = JSON.parse(rawJson);
     const validated = ItinerarySchema.safeParse(parsed);
 
     if (validated.success) {
-      console.log('[Main Agent - Boss] Itinerary passed Zod validation.');
       return validated.data;
     }
 
-    // Log schema errors, attempt repair
     const errorSummary = validated.error.flatten();
-    console.warn('[Main Agent - Boss] Itinerary failed schema validation:', JSON.stringify(errorSummary, null, 2));
-    console.log('[Main Agent - Boss] Firing repair prompt...');
+    console.warn("[Main Agent] Itinerary failed schema validation:", JSON.stringify(errorSummary, null, 2));
 
     return await repairItinerary(rawJson, errorSummary, destination, days, startDate, endDate, pace, guests, interests);
-
   } catch (parseErr) {
-    console.error('[Main Agent - Boss] Failed to parse itinerary JSON:', parseErr.message);
-    console.log('[Main Agent - Boss] Firing repair prompt...');
-    return await repairItinerary(rawJson, { _parseError: parseErr.message }, destination, days, startDate, endDate, pace, guests, interests);
+    if (parseErr.name === "SyntaxError") {
+      console.error("[Main Agent] Failed to parse itinerary JSON:", parseErr.message);
+      return await repairItinerary(
+        rawJson,
+        { _parseError: parseErr.message },
+        destination,
+        days,
+        startDate,
+        endDate,
+        pace,
+        guests,
+        interests
+      );
+    }
+
+    throw parseErr;
   }
 }
 
-/**
- * Send the broken JSON + error context back to the LLM for structural repair.
- * Falls back to a hardcoded error object if repair also fails.
- */
 async function repairItinerary(brokenJson, errors, destination, days, startDate, endDate, pace, guests, interests) {
-  try {
-    const repairPrompt = `The following JSON itinerary has structural issues that must be fixed:
+  const repairPrompt = `The following JSON itinerary has structural issues that must be fixed:
 
 ERRORS:
 ${JSON.stringify(errors, null, 2)}
@@ -180,106 +129,101 @@ ${JSON.stringify(errors, null, 2)}
 BROKEN JSON (first 3000 chars):
 ${brokenJson.slice(0, 3000)}
 
-Fix ONLY the structural/schema issues listed above. Do not change the trip content.
-Output ONLY valid JSON that satisfies the schema. No markdown, no commentary.`;
+Trip context:
+- Destination: ${destination}
+- Days: ${days}
+- Dates: ${startDate} to ${endDate}
+${pace ? `- Pace: ${pace}` : ""}
+${guests ? `- Guests: ${guests}` : ""}
+${interests ? `- Interests: ${interests}` : ""}
 
-    const repairResult = await bossLLM.invoke([{ role: 'user', content: repairPrompt }]);
-    const rawRepair = typeof repairResult.content === 'string'
-      ? repairResult.content
-      : repairResult.content[0].text;
-    const cleanRepair = rawRepair.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+Fix only the structural/schema issues listed above. Do not change the trip content.
+Output only valid JSON that satisfies the schema. No markdown, no commentary.`;
 
-    const parsedRepair = JSON.parse(cleanRepair);
-    const revalidated = ItinerarySchema.safeParse(parsedRepair);
+  const repairResult = await withTimeout(
+    bossLLM.invoke([{ role: "user", content: repairPrompt }]),
+    LLM_TIMEOUT_MS,
+    "Itinerary repair"
+  );
+  const cleanRepair = extractContent(repairResult)
+    .replace(/```json\s*/gi, "")
+    .replace(/```\s*/g, "")
+    .trim();
 
-    if (revalidated.success) {
-      console.log('[Main Agent - Boss] Repair successful — itinerary passed schema validation.');
-      return revalidated.data;
-    }
+  const parsedRepair = JSON.parse(cleanRepair);
+  const revalidated = ItinerarySchema.safeParse(parsedRepair);
 
-    // Repair also failed — use lenient fallback: return raw parsed object
-    console.warn('[Main Agent - Boss] Repair attempt still failed schema. Returning parsed object as-is.');
-    return parsedRepair;
+  if (!revalidated.success) {
+    throw new Error("Itinerary repair failed schema validation");
+  }
 
-  } catch (err) {
-    console.error('[Main Agent - Boss] Repair prompt failed:', err.message);
-    // Last resort — return a minimal valid error object
-    return {
-      destination,
-      centerCoordinates: [0, 0],
-      budget_used: "Could not estimate",
-      mapMarkers: [],
-      flights: [{ airline: "Data unavailable", price: "N/A", currency: "USD", departureDate: startDate || "", returnDate: endDate || "" }],
-      hotels: [{ name: "Data unavailable", rating: "N/A", price: "N/A", currency: "USD", lat: 0, lng: 0 }],
-      days: Array.from({ length: days }, (_, i) => ({
-        day: i + 1,
-        theme: "Itinerary data could not be generated",
-        activities: [{
-          time: "N/A",
-          location: "Please try again",
-          category: "attraction",
-          description: "The AI had trouble structuring the itinerary. Please try your request again.",
-          coordinates: [0, 0],
-        }]
-      })),
-    };
+  return revalidated.data;
+}
+
+function extractContent(result) {
+  if (typeof result.content === "string") return result.content;
+  return result.content?.[0]?.text || "";
+}
+
+function throwIfAborted(signal) {
+  if (signal?.aborted) {
+    throw new Error("Trip generation was cancelled");
   }
 }
 
 function buildSynthesizerPrompt(rawToolData, destination, days, startDate, endDate, pace, guests, interests, budgetLevel) {
-  // Map budget level to concrete price anchors
   const budgetAnchors = {
-    '$': {
-      label: 'Budget',
-      meals: '$3-10 per meal',
-      attractions: 'mostly free or under $10',
-      transport: '$1-5 local transport',
-      hotelHint: 'Use the cheapest hotel option from the data.',
+    "$": {
+      label: "Budget",
+      meals: "$3-10 per meal",
+      attractions: "mostly free or under $10",
+      transport: "$1-5 local transport",
+      hotelHint: "Use the cheapest hotel option from the data.",
     },
-    '$$': {
-      label: 'Mid-range',
-      meals: '$10-25 per meal',
-      attractions: '$5-20 per attraction',
-      transport: '$5-15 taxi/rideshare',
-      hotelHint: 'Use a moderately priced hotel from the data.',
+    "$$": {
+      label: "Mid-range",
+      meals: "$10-25 per meal",
+      attractions: "$5-20 per attraction",
+      transport: "$5-15 taxi/rideshare",
+      hotelHint: "Use a moderately priced hotel from the data.",
     },
-    '$$$': {
-      label: 'Luxury',
-      meals: '$30-80 per meal',
-      attractions: '$20-100 premium experiences',
-      transport: '$20-50 private transport',
-      hotelHint: 'Use the highest-rated hotel from the data.',
+    "$$$": {
+      label: "Luxury",
+      meals: "$30-80 per meal",
+      attractions: "$20-100 premium experiences",
+      transport: "$20-50 private transport",
+      hotelHint: "Use the highest-rated hotel from the data.",
     },
   };
-  const anchors = budgetAnchors[budgetLevel] || budgetAnchors['$$'];
+  const anchors = budgetAnchors[budgetLevel] || budgetAnchors["$$"];
 
-  return `Here is the real-world data fetched by your Control Plane:
+  return `Here is the real-world data fetched by the server-owned control plane:
 ${rawToolData}
 
 IMPORTANT DATA NOTES:
-- Any tool result with "_dataUnavailable: true" means that data source failed. For those sections, prefix prices with "~" (e.g., "~$50") and add "_estimated": true to the item.
-- Flight prices from the API are ROUND-TRIP totals (not one-way). Do NOT double them.
+- Any tool result with "_dataUnavailable": true means that data source failed or could not be resolved. For those sections, prefix prices with "~" (for example "~$50") and add "_estimated": true to the item.
+- Flight prices from the API are round-trip totals, not one-way. Do not double them.
 - Hotel prices include "pricePerNight" (per-night rate) and "priceTotal" (total stay). Use pricePerNight in the output.
-- When fabricating placeholder data for failed sources, use conservative estimates appropriate for ${destination}, NOT US-centric defaults.
+- When estimating missing data, use conservative estimates appropriate for ${destination}, not US-centric defaults.
 
-Using this data, create a detailed, day-by-day JSON itinerary for a trip to ${destination}. The flights and hotels arrays must NEVER be empty — if real data is missing, create realistic estimates marked with "_estimated": true.
+Using this data, create a detailed, day-by-day JSON itinerary for a trip to ${destination}. The flights and hotels arrays must not be empty. If real data is missing, create realistic estimates marked with "_estimated": true.
 
 ## Budget Calibration
-Budget level: ${anchors.label} (${budgetLevel || '$$'})
+Budget level: ${anchors.label} (${budgetLevel || "$$"})
 Use these cost anchors for activities:
 - Meals: ${anchors.meals}
 - Attractions/activities: ${anchors.attractions}
 - Local transport: ${anchors.transport}
 - ${anchors.hotelHint}
 
-IMPORTANT: Scale these costs DOWN for affordable destinations (SE Asia, India, Eastern Europe, Latin America). Scale UP for expensive cities (Tokyo, London, Zurich, NYC). The costs must feel realistic for ${destination} specifically.
+IMPORTANT: Scale costs down for affordable destinations (SE Asia, India, Eastern Europe, Latin America). Scale up for expensive cities (Tokyo, London, Zurich, NYC). The costs must feel realistic for ${destination} specifically.
 
 ## Strict Constraints
-${pace ? `- You must strictly adhere to the user's Pace setting: ${pace}. If Relax, max 2-3 activities a day. If Active, pack the schedule.` : ''}
-${guests ? `- Tailor the language and activity selection to the Guest type: ${guests}.` : ''}
-${interests ? `- Filter the gathered data to match the Interests: ${interests}.` : ''}
+${pace ? `- You must strictly adhere to the user's pace setting: ${pace}. If Relax, max 2-3 activities a day. If Active, pack the schedule.` : ""}
+${guests ? `- Tailor the language and activity selection to the guest type: ${guests}.` : ""}
+${interests ? `- Filter the gathered data to match the interests: ${interests}.` : ""}
 
-Ensure the output STRICTLY matches this exact JSON schema:
+Ensure the output strictly matches this JSON schema:
 {
   "destination": "City Name, Country",
   "overview": "A 2-3 sentence compelling description of the destination for travelers.",
@@ -319,15 +263,15 @@ Ensure the output STRICTLY matches this exact JSON schema:
 }
 
 - Plan exactly ${days} day(s).
-- Each activity MUST have a "category" field. Valid categories: "attraction", "breakfast", "lunch", "dinner", "transport", "shopping", "nature", "nightlife".
-- Each activity MUST have an "endTime" field showing the estimated end time.
-- Each activity MUST have a "distance_km" field showing the walking/driving distance from the PREVIOUS activity in that day (first activity of the day should be 0.0).
-- Each activity MUST have a "cost" field. Use "Free" for no-cost activities, "$X" for paid ones. Base ALL costs on the Budget Calibration anchors above. Do NOT default to expensive prices.
-- The mapMarkers array must combine the coordinates from the hotel data and all the geocoded activities. For hotels set "type": "hotel". For activities set "type": "activity" and include the "day" number.
-- The flights array MUST contain at least 2 flight options spanning the specific requested dates (${startDate} to ${endDate}). These are ROUND-TRIP prices. Include the exact flight prices and airline names from the fetched API data. If fetched data fails, fabricate realistic estimates.
-- The hotels array MUST contain at least 2 hotel options with both pricePerNight and priceTotal. Use gathered data if available, otherwise fabricate realistic estimates.
-- The budget_used field is a placeholder — it will be overridden server-side. Just put a rough estimate.
-- Output ONLY valid JSON, no markdown blocks or conversational text.`;
+- Each activity must have a "category" field. Valid categories: "attraction", "breakfast", "lunch", "dinner", "transport", "shopping", "nature", "nightlife".
+- Each activity must have an "endTime" field.
+- Each activity must have a "distance_km" field showing the walking/driving distance from the previous activity in that day. The first activity of the day should be 0.0.
+- Each activity must have a "cost" field. Use "Free" for no-cost activities, "$X" for paid ones.
+- The mapMarkers array must combine hotel coordinates and all activity coordinates. For hotels set "type": "hotel". For activities set "type": "activity" and include the "day" number.
+- The flights array must contain at least 2 flight options spanning the requested dates (${startDate} to ${endDate}).
+- The hotels array must contain at least 2 hotel options with both pricePerNight and priceTotal.
+- The budget_used field is a placeholder and will be overridden server-side.
+- Output only valid JSON, no markdown blocks or conversational text.`;
 }
 
-module.exports = { generateItinerary };
+module.exports = { generateItinerary, parseAndValidateItinerary, buildSynthesizerPrompt };

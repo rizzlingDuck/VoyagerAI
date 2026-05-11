@@ -29,10 +29,10 @@ export default function TypewriterHeading({ text1, text2 }) {
 
   return (
     <>
-      <span className="gradient-text">{rendered1}</span>
+      <span className="gradient-text inline-block max-w-full break-words">{rendered1}</span>
       {phase === 1 && <span className="inline-block w-[3px] h-[0.85em] bg-[var(--primary)] animate-pulse ml-0.5 align-bottom rounded-full" />}
-      <br className="hidden md:block"/>
-      {rendered2}
+      <br />
+      <span className="inline-block max-w-full break-words">{rendered2}</span>
       {phase === 2 && <span className="inline-block w-[3px] h-[0.85em] bg-[var(--primary)] animate-pulse ml-0.5 align-bottom rounded-full" />}
     </>
   );

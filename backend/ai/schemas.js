@@ -27,6 +27,7 @@ const FlightSchema = z.object({
   currency: z.string(),
   departureDate: z.string(),
   returnDate: z.string(),
+  _estimated: z.boolean().optional(),
 });
 
 const HotelSchema = z.object({
@@ -39,6 +40,7 @@ const HotelSchema = z.object({
   lat: z.number(),
   lng: z.number(),
   url: z.string().optional(),
+  _estimated: z.boolean().optional(),
 });
 
 const ActivitySchema = z.object({

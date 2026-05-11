@@ -1,6 +1,6 @@
 import { X, Plus, MapPin, Calendar, LogIn, LogOut } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../context/useAuth";
 
 function Sidebar({ isOpen, toggleSidebar, savedTrips, loadTrip, startNewTrip, onOpenAuth }) {
   const { user, signOut } = useAuth();
@@ -25,6 +25,8 @@ function Sidebar({ isOpen, toggleSidebar, savedTrips, loadTrip, startNewTrip, on
       <motion.div
         className="fixed inset-y-0 left-0 w-[300px] z-50 flex flex-col glass-heavy"
         style={{ boxShadow: "var(--shadow-lg)" }}
+        aria-hidden={!isOpen}
+        inert={!isOpen}
         initial={{ x: "-100%" }}
         animate={{ x: isOpen ? 0 : "-100%" }}
         transition={{ type: "spring", damping: 28, stiffness: 300 }}

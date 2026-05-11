@@ -1,13 +1,3 @@
-/**
- * Retries an async function with exponential backoff.
- *
- * @param {() => Promise<any>} fn - The async function to retry.
- * @param {object} [options]
- * @param {number} [options.maxAttempts=3] - Maximum number of attempts.
- * @param {number} [options.baseDelayMs=500] - Base delay in ms. Doubles each attempt.
- * @param {string} [options.label="operation"] - Label for log messages.
- * @returns {Promise<any>}
- */
 async function withRetry(fn, { maxAttempts = 3, baseDelayMs = 500, label = "operation" } = {}) {
   let lastError;
 
@@ -16,9 +6,12 @@ async function withRetry(fn, { maxAttempts = 3, baseDelayMs = 500, label = "oper
       return await fn();
     } catch (err) {
       lastError = err;
-      if (attempt === maxAttempts) break;
 
-      const delay = baseDelayMs * Math.pow(2, attempt - 1); // 500ms → 1000ms → 2000ms
+      if (err.retryable === false || err.name === "AbortError" || attempt === maxAttempts) {
+        break;
+      }
+
+      const delay = baseDelayMs * Math.pow(2, attempt - 1);
       console.warn(
         `[Retry] ${label} failed (attempt ${attempt}/${maxAttempts}). Retrying in ${delay}ms... Error: ${err.message}`
       );
