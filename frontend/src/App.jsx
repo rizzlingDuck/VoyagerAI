@@ -1,17 +1,17 @@
-import { useState } from "react";
-import mapboxgl from "mapbox-gl";
+import { lazy, Suspense, useState } from "react";
 import { differenceInDays, format } from "date-fns";
 
-import { AuthProvider, useAuth } from "./context/AuthContext";
+import { AuthProvider } from "./context/AuthContext";
+import { useAuth } from "./context/useAuth";
 import LandingPage from "./components/landing/LandingPage";
 import StreamingLoader from "./components/common/StreamingLoader";
-import ItineraryView from "./components/itinerary/ItineraryView";
 import ErrorBoundary from "./components/common/ErrorBoundary";
-import AuthModal from "./components/auth/AuthModal";
+import LoadingSpinner from "./components/common/LoadingSpinner";
 import useSavedTrips from "./hooks/useSavedTrips";
 import useStreamingTrip from "./hooks/useStreamingTrip";
 
-mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN;
+const AuthModal = lazy(() => import("./components/auth/AuthModal"));
+const ItineraryView = lazy(() => import("./components/itinerary/ItineraryView"));
 
 // ─────────────── Inner App (needs AuthContext) ───────────────
 function AppInner() {
@@ -101,7 +101,9 @@ function AppInner() {
           onStartNewTrip={handleNewTrip}
           onOpenAuth={() => setAuthModalOpen(true)}
         />
-        <AuthModal isOpen={authModalOpen} onClose={() => setAuthModalOpen(false)} />
+        <Suspense fallback={null}>
+          <AuthModal isOpen={authModalOpen} onClose={() => setAuthModalOpen(false)} />
+        </Suspense>
       </>
     );
   }
@@ -121,23 +123,27 @@ function AppInner() {
   return (
     <>
       <ErrorBoundary onReset={handleNewTrip}>
-        <ItineraryView
-          itinerary={displayedItinerary}
-          isSaved={isSaved}
-          activeDay={activeDay}
-          setActiveDay={setActiveDay}
-          sidebarOpen={sidebarOpen}
-          savedTrips={savedTrips}
-          onSave={handleSave}
-          onNewTrip={handleNewTrip}
-          onOpenSidebar={() => setSidebarOpen(true)}
-          onCloseSidebar={() => setSidebarOpen(false)}
-          onLoadTrip={handleLoadTrip}
-          onStartNewTrip={handleNewTrip}
-          onOpenAuth={() => setAuthModalOpen(true)}
-        />
+        <Suspense fallback={<LoadingSpinner />}>
+          <ItineraryView
+            itinerary={displayedItinerary}
+            isSaved={isSaved}
+            activeDay={activeDay}
+            setActiveDay={setActiveDay}
+            sidebarOpen={sidebarOpen}
+            savedTrips={savedTrips}
+            onSave={handleSave}
+            onNewTrip={handleNewTrip}
+            onOpenSidebar={() => setSidebarOpen(true)}
+            onCloseSidebar={() => setSidebarOpen(false)}
+            onLoadTrip={handleLoadTrip}
+            onStartNewTrip={handleNewTrip}
+            onOpenAuth={() => setAuthModalOpen(true)}
+          />
+        </Suspense>
       </ErrorBoundary>
-      <AuthModal isOpen={authModalOpen} onClose={() => setAuthModalOpen(false)} />
+      <Suspense fallback={null}>
+        <AuthModal isOpen={authModalOpen} onClose={() => setAuthModalOpen(false)} />
+      </Suspense>
     </>
   );
 }

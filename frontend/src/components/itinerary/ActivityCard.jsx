@@ -19,11 +19,13 @@ const ActivityCard = forwardRef(function ActivityCard({ activity, index, onCardC
       )}
 
       {/* Activity Card */}
-      <motion.div
+      <motion.button
         ref={ref}
-        className="relative rounded-xl p-4 mb-3 cursor-pointer group"
+        type="button"
+        className="relative rounded-xl p-4 mb-3 cursor-pointer group w-full text-left"
         style={{ background: "var(--bg-card)", border: "1px solid var(--border)", boxShadow: "var(--shadow-sm)" }}
-        onClick={() => onCardClick(activity)}
+        onClick={() => onCardClick?.(activity)}
+        aria-label={`Show ${activity.location} on the map`}
         whileHover={{ y: -2, boxShadow: "0 8px 24px rgba(0, 119, 182, 0.1), 0 2px 8px rgba(0,0,0,0.04)", borderColor: "rgba(0, 119, 182, 0.3)" }}
         transition={{ duration: 0.2 }}
       >
@@ -48,7 +50,7 @@ const ActivityCard = forwardRef(function ActivityCard({ activity, index, onCardC
 
         {/* Description */}
         <p className="text-sm leading-relaxed" style={{ color: "var(--text-muted)" }}>{activity.description}</p>
-      </motion.div>
+      </motion.button>
     </div>
   );
 });

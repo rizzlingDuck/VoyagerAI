@@ -26,6 +26,8 @@ export default function useStreamingTrip() {
   const abortRef = useRef(null);
 
   const startTrip = useCallback(async (formData) => {
+    abortRef.current?.abort();
+
     // Reset
     setStatus("streaming");
     setPhase("started");
@@ -54,10 +56,17 @@ export default function useStreamingTrip() {
       });
 
       if (!response.ok) {
+        let message = `Server error: ${response.status}`;
+        try {
+          const body = await response.json();
+          if (body?.error) message = body.error;
+        } catch {
+          // Keep the status fallback when the response body is not JSON.
+        }
         if (response.status === 401) {
           throw new Error("Please sign in to plan a trip.");
         }
-        throw new Error(`Server error: ${response.status}`);
+        throw new Error(message);
       }
 
       const reader = response.body.getReader();
@@ -124,13 +133,21 @@ export default function useStreamingTrip() {
         break;
 
       case "tool_error":
-        setToolEvents((prev) =>
-          prev.map((t) =>
+        setToolEvents((prev) => {
+          const existing = prev.some((t) => t.tool === data.tool);
+          if (!existing) {
+            return [
+              ...prev,
+              { tool: data.tool, label: data.label, status: "error", error: data.error, preview: null },
+            ];
+          }
+
+          return prev.map((t) =>
             t.tool === data.tool
               ? { ...t, status: "error", error: data.error }
               : t
-          )
-        );
+          );
+        });
         break;
 
       case "complete":

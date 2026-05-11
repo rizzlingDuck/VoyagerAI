@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "../lib/supabaseClient";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../context/useAuth";
 
 /**
  * Custom hook — saved trip persistence via Supabase (PostgreSQL + RLS).
@@ -11,20 +11,28 @@ export default function useSavedTrips() {
   const [savedTrips, setSavedTrips] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  // Load trips from Supabase whenever the user changes
   useEffect(() => {
-    if (!user) { setSavedTrips([]); return; }
+    let cancelled = false;
 
-    setLoading(true);
-    supabase
-      .from("trips")
-      .select("id, destination, saved_at, itinerary")
-      .order("saved_at", { ascending: false })
-      .then(({ data, error }) => {
+    const loadTrips = async () => {
+      if (!user) {
+        if (!cancelled) {
+          setSavedTrips([]);
+          setLoading(false);
+        }
+        return;
+      }
+
+      setLoading(true);
+      const { data, error } = await supabase
+        .from("trips")
+        .select("id, destination, saved_at, itinerary")
+        .order("saved_at", { ascending: false });
+
+      if (!cancelled) {
         if (error) {
           console.error("[useSavedTrips] Failed to load trips:", error.message);
         } else {
-          // Flatten: expose itinerary fields at top level for compatibility
           setSavedTrips(
             (data || []).map((row) => ({
               ...row.itinerary,
@@ -35,7 +43,14 @@ export default function useSavedTrips() {
           );
         }
         setLoading(false);
-      });
+      }
+    };
+
+    Promise.resolve().then(loadTrips);
+
+    return () => {
+      cancelled = true;
+    };
   }, [user]);
 
   const saveTrip = useCallback(async (itinerary) => {

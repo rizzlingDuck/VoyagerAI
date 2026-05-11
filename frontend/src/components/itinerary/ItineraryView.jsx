@@ -1,6 +1,5 @@
-import { useRef, useCallback } from "react";
+import { lazy, Suspense, useRef, useCallback } from "react";
 import Sidebar from "../Sidebar";
-import MapboxMap from "../map/MapboxMap";
 import TopBar from "./TopBar";
 import DayTabs from "./DayTabs";
 import OverviewCard from "./OverviewCard";
@@ -9,7 +8,9 @@ import HotelsCard from "./HotelsCard";
 import DayTimeline from "./DayTimeline";
 import useScrollSpy from "../../hooks/useScrollSpy";
 
-export default function ItineraryView({ itinerary, isSaved, activeDay, setActiveDay, sidebarOpen, savedTrips, onSave, onNewTrip, onOpenSidebar, onCloseSidebar, onLoadTrip, onStartNewTrip }) {
+const MapboxMap = lazy(() => import("../map/MapboxMap"));
+
+export default function ItineraryView({ itinerary, isSaved, activeDay, setActiveDay, sidebarOpen, savedTrips, onSave, onNewTrip, onOpenSidebar, onCloseSidebar, onLoadTrip, onStartNewTrip, onOpenAuth }) {
   const activityRefs = useRef({});
   const dayRefs = useRef({});
   const scrollContainerRef = useRef(null);
@@ -44,7 +45,7 @@ export default function ItineraryView({ itinerary, isSaved, activeDay, setActive
 
   return (
     <div className="h-screen flex flex-col" style={{ background: "var(--bg)", color: "var(--text)", fontFamily: "var(--font-body)" }}>
-      <Sidebar isOpen={sidebarOpen} toggleSidebar={onCloseSidebar} savedTrips={savedTrips} loadTrip={onLoadTrip} startNewTrip={onStartNewTrip} />
+      <Sidebar isOpen={sidebarOpen} toggleSidebar={onCloseSidebar} savedTrips={savedTrips} loadTrip={onLoadTrip} startNewTrip={onStartNewTrip} onOpenAuth={onOpenAuth} />
 
       <TopBar isSaved={isSaved} onSave={onSave} onNewTrip={onNewTrip} onOpenSidebar={onOpenSidebar} />
       <DayTabs days={itinerary?.days} activeDay={activeDay} onDayTabClick={handleDayTabClick} />
@@ -82,7 +83,9 @@ export default function ItineraryView({ itinerary, isSaved, activeDay, setActive
 
         {/* RIGHT PANEL: Map */}
         <div className="hidden md:block flex-1 relative">
-          <MapboxMap ref={mapRef} itinerary={itinerary} activeDay={activeDay} onMarkerClick={handleMarkerClick} />
+          <Suspense fallback={<div className="w-full h-full" style={{ background: "var(--bg)" }} />}>
+            <MapboxMap ref={mapRef} itinerary={itinerary} activeDay={activeDay} onMarkerClick={handleMarkerClick} />
+          </Suspense>
         </div>
       </div>
     </div>
